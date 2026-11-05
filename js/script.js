@@ -916,7 +916,6 @@ const SLOW_FRAME_MS = 50;
 const SLOW_FRAME_LIMIT = 40;
 
 const nebulaCanvas = document.getElementById('nebulaCanvas');
-const sceneCaption = document.getElementById('sceneCaption');
 let nebula = null;
 
 // Draw the nebula at lower resolution than the screen, since this is the demanding part
@@ -1003,15 +1002,6 @@ function drawNebula(time) {
     nebula.gl.uniform1i(nebula.sceneA, journey.from);
     nebula.gl.uniform1i(nebula.sceneB, journey.to);
     nebula.gl.drawArrays(nebula.gl.TRIANGLES, 0, 6);
-  }
-}
-
-// Say where we are, fading the label out during each jump
-function updateCaption(journey) {
-  const changing = journey.blend > 0;
-  sceneCaption.classList.toggle('changing', changing);
-  if (!changing) {
-    sceneCaption.textContent = JOURNEY[journey.from];
   }
 }
 
@@ -1247,7 +1237,6 @@ function animateBackground(time) {
   }
 
   const journey = getJourney(time);
-  updateCaption(journey);
 
   starContext.clearRect(0, 0, starWidth, starHeight);
   moveStars(stars, seconds, journey.warp);
@@ -1271,7 +1260,6 @@ function drawStillBackground() {
   drawNebula(0);
   drawStars(0, 0);
   drawFlareStars(0, 0);
-  updateCaption(getJourney(0));
 }
 
 nebula = setupNebula();

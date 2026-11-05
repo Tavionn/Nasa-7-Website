@@ -82,24 +82,6 @@ body:has(.modal[open]) {
   left: 0;
 }
 
-/* Small label saying where the journey is right now */
-.scene-caption {
-  position: absolute;
-  left: 16px;
-  bottom: 14px;
-  padding: 3px 10px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text);
-  background-color: rgba(5, 6, 10, 0.65);
-  border-radius: 4px;
-  transition: opacity 0.8s ease;
-}
-
-.scene-caption.changing {
-  opacity: 0;
-}
-
 /* Centered container */
 .container {
   max-width: 1200px;
