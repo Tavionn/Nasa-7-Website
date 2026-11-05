@@ -28,10 +28,15 @@
       <button type="submit" id="getImagesButton">Get Space Images</button>
     </form>
 
-    <!-- Random space fact (filled in by script.js each time the page loads) -->
-    <section class="space-fact" aria-labelledby="factHeading">
-      <h2 id="factHeading">Did You Know?</h2>
-      <p id="factText"></p>
+    <!-- Rotating space facts (filled in by script.js, starting with a random fact on each load) -->
+    <section class="space-fact" id="spaceFact" aria-labelledby="factHeading">
+      <div class="fact-top">
+        <h2 id="factHeading">Did You Know?</h2>
+        <button type="button" id="factPause" class="fact-pause"></button>
+      </div>
+      <div class="fact-body">
+        <p id="factText"></p>
+      </div>
     </section>
 
     <div id="gallery" class="gallery">

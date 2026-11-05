@@ -9,20 +9,40 @@ const BACKUP_URL = 'data/backup-entries.json';
 // Give up on a request if there's no answer after 20 seconds
 const REQUEST_TIMEOUT_MS = 20000;
 
-// Facts for the "Did You Know?" section. One is picked at random on each page load.
+// Everything the fact box can show. Each item has a label and some text.
+// It starts with a random "Did You Know?" fact, then rotates through the rest.
 const spaceFacts = [
-  'A day on Venus is longer than its year: it takes about 243 Earth days to spin once, but only 225 to orbit the Sun.',
-  'Sunlight takes about 8 minutes and 20 seconds to reach Earth.',
-  'Olympus Mons on Mars is the tallest volcano in the solar system, about 2.5 times the height of Mount Everest.',
-  'Saturn is less dense than water. Its average density is only about 70% of water\'s.',
-  'A teaspoon of neutron star material would weigh billions of tons.',
-  'Astronauts on the International Space Station can see about 16 sunrises every day, because they orbit Earth every 90 minutes.',
-  'Voyager 1, launched in 1977, is the most distant human-made object and is now in interstellar space.',
-  'The light you see from the Andromeda Galaxy left it about 2.5 million years ago.',
-  'The footprints left on the Moon could last for millions of years, because there is no wind or water to erase them.',
-  'Jupiter\'s Great Red Spot is a giant storm wider than the entire Earth.',
-  'NASA has shared an Astronomy Picture of the Day since June 16, 1995.'
+  { label: 'Did You Know?', text: 'A day on Venus is longer than its year: it takes about 243 Earth days to spin once, but only 225 to orbit the Sun.' },
+  { label: 'Did You Know?', text: 'Sunlight takes about 8 minutes and 20 seconds to reach Earth.' },
+  { label: 'Did You Know?', text: 'Olympus Mons on Mars is the tallest volcano in the solar system, about 2.5 times the height of Mount Everest.' },
+  { label: 'Did You Know?', text: 'Saturn is less dense than water. Its average density is only about 70% of water\'s.' },
+  { label: 'Did You Know?', text: 'A teaspoon of neutron star material would weigh billions of tons.' },
+  { label: 'Did You Know?', text: 'Astronauts on the International Space Station can see about 16 sunrises every day, because they orbit Earth every 90 minutes.' },
+  { label: 'Did You Know?', text: 'Voyager 1, launched in 1977, is the most distant human-made object and is now in interstellar space.' },
+  { label: 'Did You Know?', text: 'The light you see from the Andromeda Galaxy left it about 2.5 million years ago.' },
+  { label: 'Did You Know?', text: 'The footprints left on the Moon could last for millions of years, because there is no wind or water to erase them.' },
+  { label: 'Did You Know?', text: 'Jupiter\'s Great Red Spot is a giant storm wider than the entire Earth.' },
+  { label: 'Did You Know?', text: 'NASA has shared an Astronomy Picture of the Day since June 16, 1995.' },
+  { label: 'NASA Milestone', text: '1958: NASA officially opened for business on October 1.' },
+  { label: 'NASA Milestone', text: '1969: Apollo 11 landed the first humans on the Moon on July 20.' },
+  { label: 'NASA Milestone', text: '1990: The Hubble Space Telescope launched on April 24.' },
+  { label: 'NASA Milestone', text: '2021: NASA\'s Ingenuity helicopter made the first powered flight on another planet, on Mars.' },
+  { label: 'NASA Milestone', text: '2021: The James Webb Space Telescope launched on December 25.' },
+  { label: 'NASA Milestone', text: '2022: Artemis I flew an uncrewed Orion spacecraft around the Moon and back.' },
+  { label: 'By the Numbers', text: '13.8 billion years: the approximate age of the universe.' },
+  { label: 'By the Numbers', text: '4.6 billion years: the approximate age of our Sun.' },
+  { label: 'By the Numbers', text: '238,855 miles: the average distance from Earth to the Moon.' },
+  { label: 'By the Numbers', text: '93 million miles: the average distance from Earth to the Sun.' },
+  { label: 'By the Numbers', text: '17,500 mph: about how fast the International Space Station travels.' },
+  { label: 'Look Up Tonight', text: 'Five planets can be seen without a telescope: Mercury, Venus, Mars, Jupiter, and Saturn.' },
+  { label: 'Look Up Tonight', text: 'The International Space Station looks like a bright, fast-moving dot. NASA\'s Spot the Station site shows when it passes over you.' },
+  { label: 'Look Up Tonight', text: 'From a dark spot away from city lights, you can see the Milky Way with just your eyes.' },
+  { label: 'Look Up Tonight', text: 'The Andromeda Galaxy is the farthest thing most people can see without a telescope.' }
 ];
+
+// How long each item stays on screen, and how long its fade takes (match style.css)
+const FACT_DISPLAY_MS = 7000;
+const FACT_FADE_MS = 400;
 
 // Find the elements we need on the page
 const startInput = document.getElementById('startDate');
@@ -30,7 +50,10 @@ const endInput = document.getElementById('endDate');
 const dateForm = document.getElementById('dateForm');
 const getImagesButton = document.getElementById('getImagesButton');
 const gallery = document.getElementById('gallery');
+const spaceFact = document.getElementById('spaceFact');
+const factHeading = document.getElementById('factHeading');
 const factText = document.getElementById('factText');
+const factPause = document.getElementById('factPause');
 const modal = document.getElementById('modal');
 const modalClose = document.getElementById('modalClose');
 const modalMedia = document.getElementById('modalMedia');
@@ -49,8 +72,68 @@ let currentEntries = [];
 // - Restrict dates to NASA's image archive (starting from 1995)
 setupDateInputs(startInput, endInput);
 
-// Show a random space fact
-factText.textContent = spaceFacts[Math.floor(Math.random() * spaceFacts.length)];
+// Mix up a list so the items come in a random order
+function shuffle(list) {
+  const mixed = [...list];
+  for (let i = mixed.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [mixed[i], mixed[j]] = [mixed[j], mixed[i]];
+  }
+  return mixed;
+}
+
+// Put the items in a random order, with a "Did You Know?" fact first
+const factOrder = shuffle(spaceFacts);
+const firstFact = factOrder.findIndex((fact) => fact.label === 'Did You Know?');
+[factOrder[0], factOrder[firstFact]] = [factOrder[firstFact], factOrder[0]];
+
+let factIndex = 0;
+let isFactPaused = false;
+let isFactHovered = false;
+
+// Put an item in the fact box
+function showFact(fact) {
+  factHeading.textContent = fact.label;
+  factText.textContent = fact.text;
+}
+
+// Fade out the current item, swap in the next one, and fade back in
+function showNextFact() {
+  if (isFactPaused || isFactHovered) {
+    return;
+  }
+  spaceFact.classList.add('fading');
+  setTimeout(() => {
+    factIndex = (factIndex + 1) % factOrder.length;
+    showFact(factOrder[factIndex]);
+    spaceFact.classList.remove('fading');
+  }, FACT_FADE_MS);
+}
+
+// Update the pause button to match the current state
+function setFactPaused(paused) {
+  isFactPaused = paused;
+  factPause.textContent = paused ? '▶ Play' : '❚❚ Pause';
+  factPause.setAttribute('aria-label', paused ? 'Play rotating facts' : 'Pause rotating facts');
+}
+
+showFact(factOrder[0]);
+
+// Start paused for people who've asked their device to reduce motion
+setFactPaused(window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+setInterval(showNextFact, FACT_DISPLAY_MS);
+
+factPause.addEventListener('click', () => {
+  setFactPaused(!isFactPaused);
+});
+
+// Hold the current item while someone is reading it with the mouse over it
+spaceFact.addEventListener('mouseenter', () => {
+  isFactHovered = true;
+});
+spaceFact.addEventListener('mouseleave', () => {
+  isFactHovered = false;
+});
 
 // Make text from the API safe to put inside a template literal of HTML
 function escapeHtml(text) {
