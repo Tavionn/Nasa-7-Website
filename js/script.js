@@ -18,35 +18,36 @@ const API_TIMEOUT_MS = 8000;
 // Give up on other requests if there's no answer after 20 seconds
 const REQUEST_TIMEOUT_MS = 20000;
 
-// Everything the fact box can show. Each item has a label and some text.
+// Everything the fact box can show. Each item has a label, some text, and the part
+// of the text to highlight.
 // It starts with a random "Did You Know?" fact, then rotates through the rest.
 const spaceFacts = [
-  { label: 'Did You Know?', text: 'A day on Venus is longer than its year: it takes about 243 Earth days to spin once, but only 225 to orbit the Sun.' },
-  { label: 'Did You Know?', text: 'Sunlight takes about 8 minutes and 20 seconds to reach Earth.' },
-  { label: 'Did You Know?', text: 'Olympus Mons on Mars is the tallest volcano in the solar system, about 2.5 times the height of Mount Everest.' },
-  { label: 'Did You Know?', text: 'Saturn is less dense than water. Its average density is only about 70% of water\'s.' },
-  { label: 'Did You Know?', text: 'A teaspoon of neutron star material would weigh billions of tons.' },
-  { label: 'Did You Know?', text: 'Astronauts on the International Space Station can see about 16 sunrises every day, because they orbit Earth every 90 minutes.' },
-  { label: 'Did You Know?', text: 'Voyager 1, launched in 1977, is the most distant human-made object and is now in interstellar space.' },
-  { label: 'Did You Know?', text: 'The light you see from the Andromeda Galaxy left it about 2.5 million years ago.' },
-  { label: 'Did You Know?', text: 'The footprints left on the Moon could last for millions of years, because there is no wind or water to erase them.' },
-  { label: 'Did You Know?', text: 'Jupiter\'s Great Red Spot is a giant storm wider than the entire Earth.' },
-  { label: 'Did You Know?', text: 'NASA has shared an Astronomy Picture of the Day since June 16, 1995.' },
-  { label: 'NASA Milestone', text: '1958: NASA officially opened for business on October 1.' },
-  { label: 'NASA Milestone', text: '1969: Apollo 11 landed the first humans on the Moon on July 20.' },
-  { label: 'NASA Milestone', text: '1990: The Hubble Space Telescope launched on April 24.' },
-  { label: 'NASA Milestone', text: '2021: NASA\'s Ingenuity helicopter made the first powered flight on another planet, on Mars.' },
-  { label: 'NASA Milestone', text: '2021: The James Webb Space Telescope launched on December 25.' },
-  { label: 'NASA Milestone', text: '2022: Artemis I flew an uncrewed Orion spacecraft around the Moon and back.' },
-  { label: 'By the Numbers', text: '13.8 billion years: the approximate age of the universe.' },
-  { label: 'By the Numbers', text: '4.6 billion years: the approximate age of our Sun.' },
-  { label: 'By the Numbers', text: '238,855 miles: the average distance from Earth to the Moon.' },
-  { label: 'By the Numbers', text: '93 million miles: the average distance from Earth to the Sun.' },
-  { label: 'By the Numbers', text: '17,500 mph: about how fast the International Space Station travels.' },
-  { label: 'Look Up Tonight', text: 'Five planets can be seen without a telescope: Mercury, Venus, Mars, Jupiter, and Saturn.' },
-  { label: 'Look Up Tonight', text: 'The International Space Station looks like a bright, fast-moving dot. NASA\'s Spot the Station site shows when it passes over you.' },
-  { label: 'Look Up Tonight', text: 'From a dark spot away from city lights, you can see the Milky Way with just your eyes.' },
-  { label: 'Look Up Tonight', text: 'The Andromeda Galaxy is the farthest thing most people can see without a telescope.' }
+  { label: 'Did You Know?', text: 'A day on Venus is longer than its year: it takes about 243 Earth days to spin once, but only 225 to orbit the Sun.', highlight: 'longer than its year:' },
+  { label: 'Did You Know?', text: 'Sunlight takes about 8 minutes and 20 seconds to reach Earth.', highlight: '8 minutes and 20 seconds' },
+  { label: 'Did You Know?', text: 'Olympus Mons on Mars is the tallest volcano in the solar system, about 2.5 times the height of Mount Everest.', highlight: 'tallest volcano in the solar system,' },
+  { label: 'Did You Know?', text: 'Saturn is less dense than water. Its average density is only about 70% of water\'s.', highlight: 'less dense than water.' },
+  { label: 'Did You Know?', text: 'A teaspoon of neutron star material would weigh billions of tons.', highlight: 'billions of tons.' },
+  { label: 'Did You Know?', text: 'Astronauts on the International Space Station can see about 16 sunrises every day, because they orbit Earth every 90 minutes.', highlight: '16 sunrises every day,' },
+  { label: 'Did You Know?', text: 'Voyager 1, launched in 1977, is the most distant human-made object and is now in interstellar space.', highlight: 'most distant human-made object' },
+  { label: 'Did You Know?', text: 'The light you see from the Andromeda Galaxy left it about 2.5 million years ago.', highlight: '2.5 million years ago.' },
+  { label: 'Did You Know?', text: 'The footprints left on the Moon could last for millions of years, because there is no wind or water to erase them.', highlight: 'millions of years,' },
+  { label: 'Did You Know?', text: 'Jupiter\'s Great Red Spot is a giant storm wider than the entire Earth.', highlight: 'wider than the entire Earth.' },
+  { label: 'Did You Know?', text: 'NASA has shared an Astronomy Picture of the Day since June 16, 1995.', highlight: 'June 16, 1995.' },
+  { label: 'NASA Milestone', text: '1958: NASA officially opened for business on October 1.', highlight: '1958:' },
+  { label: 'NASA Milestone', text: '1969: Apollo 11 landed the first humans on the Moon on July 20.', highlight: '1969:' },
+  { label: 'NASA Milestone', text: '1990: The Hubble Space Telescope launched on April 24.', highlight: '1990:' },
+  { label: 'NASA Milestone', text: '2021: NASA\'s Ingenuity helicopter made the first powered flight on another planet, on Mars.', highlight: '2021:' },
+  { label: 'NASA Milestone', text: '2021: The James Webb Space Telescope launched on December 25.', highlight: '2021:' },
+  { label: 'NASA Milestone', text: '2022: Artemis I flew an uncrewed Orion spacecraft around the Moon and back.', highlight: '2022:' },
+  { label: 'By the Numbers', text: '13.8 billion years: the approximate age of the universe.', highlight: '13.8 billion years:' },
+  { label: 'By the Numbers', text: '4.6 billion years: the approximate age of our Sun.', highlight: '4.6 billion years:' },
+  { label: 'By the Numbers', text: '238,855 miles: the average distance from Earth to the Moon.', highlight: '238,855 miles:' },
+  { label: 'By the Numbers', text: '93 million miles: the average distance from Earth to the Sun.', highlight: '93 million miles:' },
+  { label: 'By the Numbers', text: '17,500 mph: about how fast the International Space Station travels.', highlight: '17,500 mph:' },
+  { label: 'Look Up Tonight', text: 'Five planets can be seen without a telescope: Mercury, Venus, Mars, Jupiter, and Saturn.', highlight: 'Five planets' },
+  { label: 'Look Up Tonight', text: 'The International Space Station looks like a bright, fast-moving dot. NASA\'s Spot the Station site shows when it passes over you.', highlight: 'bright, fast-moving dot.' },
+  { label: 'Look Up Tonight', text: 'From a dark spot away from city lights, you can see the Milky Way with just your eyes.', highlight: 'the Milky Way' },
+  { label: 'Look Up Tonight', text: 'The Andromeda Galaxy is the farthest thing most people can see without a telescope.', highlight: 'farthest thing' }
 ];
 
 // How long each item stays on screen, and how long its fade takes (match style.css)
@@ -103,10 +104,30 @@ let factIndex = 0;
 let isFactPaused = false;
 let isFactHovered = false;
 
-// Put an item in the fact box
+// Wrap each word in its own span, so the words can rise into place one after another
+function wrapWords(text, className, firstWordNumber) {
+  return text.split(' ').filter((word) => word).map((word, index) => {
+    const delay = (firstWordNumber + index) * 28;
+    return `<span class="fact-word ${className}" style="animation-delay: ${delay}ms">${word}</span>`;
+  }).join(' ');
+}
+
+// Put an item in the fact box, with its key phrase highlighted
 function showFact(fact) {
   factHeading.textContent = fact.label;
-  factText.textContent = fact.text;
+  spaceFact.dataset.category = fact.label;
+
+  const highlightStart = fact.text.indexOf(fact.highlight);
+  const before = fact.text.slice(0, highlightStart);
+  const after = fact.text.slice(highlightStart + fact.highlight.length);
+  const beforeCount = before.split(' ').filter((word) => word).length;
+  const highlightCount = fact.highlight.split(' ').length;
+
+  factText.innerHTML = [
+    wrapWords(before, '', 0),
+    wrapWords(fact.highlight, 'fact-highlight', beforeCount),
+    wrapWords(after, '', beforeCount + highlightCount)
+  ].filter((part) => part).join(' ');
 }
 
 // Fade out the current item, swap in the next one, and fade back in
@@ -125,6 +146,7 @@ function showNextFact() {
 // Update the pause button to match the current state
 function setFactPaused(paused) {
   isFactPaused = paused;
+  spaceFact.classList.toggle('paused', paused);
   factPause.textContent = paused ? '▶ Play' : '❚❚ Pause';
   factPause.setAttribute('aria-label', paused ? 'Play rotating facts' : 'Pause rotating facts');
 }
@@ -162,6 +184,22 @@ function showMessage(icon, message) {
     <div class="placeholder" role="status">
       <div class="placeholder-icon">${icon}</div>
       <p>${message}</p>
+    </div>
+  `;
+}
+
+// Show the loading animation in place of the gallery: planets circling a glowing sun
+function showLoading() {
+  gallery.innerHTML = `
+    <div class="placeholder" role="status">
+      <div class="loader" aria-hidden="true">
+        <span class="loader-orbit orbit-outer"></span>
+        <span class="loader-orbit orbit-middle"></span>
+        <span class="loader-orbit orbit-inner"></span>
+        <span class="loader-sun"></span>
+      </div>
+      <p class="loader-text">Loading space photos…</p>
+      <p class="loader-subtext">Retrieving pictures from NASA</p>
     </div>
   `;
 }
@@ -394,7 +432,7 @@ async function loadGallery() {
   }
 
   // Show the loading message, and stop extra clicks while we wait
-  showMessage('🔄', 'Loading space photos…');
+  showLoading();
   getImagesButton.disabled = true;
 
   // The first time, start the Big Bang while the photos load in the background.

@@ -6,7 +6,7 @@
   <title>NASA Space Explorer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono&family=Inter:wght@400;600;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono&family=Inter:wght@400;600;800&family=Orbitron:wght@600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
   <link href="style.css" rel="stylesheet" type="text/css" />
 </head>
 <body>
@@ -45,6 +45,12 @@
 
     <!-- Rotating space facts (filled in by script.js, starting with a random fact on each load) -->
     <section class="space-fact" id="spaceFact" aria-labelledby="factHeading">
+      <!-- The panel's own little sky: two layers of stars and a passing comet -->
+      <div class="fact-sky" aria-hidden="true">
+        <span class="fact-stars"></span>
+        <span class="fact-stars far"></span>
+        <span class="fact-comet"></span>
+      </div>
       <div class="fact-top">
         <div class="fact-title">
           <span class="live-dot"></span>

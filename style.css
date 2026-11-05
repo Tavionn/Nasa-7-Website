@@ -234,14 +234,145 @@ input[type="date"] {
   }
 }
 
-/* Rotating fact panel */
+/* Rotating fact panel: dark glass looking out into space.
+   Each type of item has its own color (see below). */
 .space-fact {
-  max-width: 800px;
+  --fact-color: 255, 214, 140;
+  position: relative;
+  max-width: 900px;
   margin: 0 auto 32px;
-  padding: 16px 20px;
-  background-color: rgba(12, 14, 21, 0.94);
-  border: 1px solid var(--line);
-  border-radius: 4px;
+  padding: 20px 24px 22px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 55% 130% at 0% 0%, rgba(var(--fact-color), 0.2), transparent 70%),
+    radial-gradient(ellipse 50% 120% at 100% 100%, rgba(120, 70, 220, 0.3), transparent 70%),
+    rgba(6, 8, 22, 0.86);
+  border: 1px solid rgba(var(--fact-color), 0.4);
+  border-radius: 8px;
+  box-shadow: 0 0 26px rgba(var(--fact-color), 0.16), inset 0 0 34px rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  transition: border-color 0.6s ease, box-shadow 0.6s ease;
+}
+
+/* The panel's own sky sits behind its words */
+.fact-sky {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.fact-top,
+.fact-body {
+  position: relative;
+}
+
+/* Tiny stars, made from small dots repeated across the panel */
+.fact-stars {
+  position: absolute;
+  inset: 0 0 0 -240px;
+  background-image:
+    radial-gradient(1px 1px at 18px 24px, #ffffff, transparent),
+    radial-gradient(1px 1px at 62px 88px, #cfe0ff, transparent),
+    radial-gradient(1.5px 1.5px at 104px 40px, #ffffff, transparent),
+    radial-gradient(1px 1px at 146px 112px, #ffe2c4, transparent),
+    radial-gradient(1.5px 1.5px at 190px 70px, #ffffff, transparent),
+    radial-gradient(1px 1px at 226px 16px, #cfe0ff, transparent);
+  background-size: 240px 130px;
+  animation: fact-stars-drift 40s linear infinite, fact-stars-twinkle 3.2s ease-in-out infinite;
+}
+
+.fact-stars.far {
+  inset: -30px 0 0 -170px;
+  background-size: 170px 96px;
+  opacity: 0.55;
+  animation-name: fact-stars-drift-far, fact-stars-twinkle-far;
+  animation-duration: 70s, 4.6s;
+}
+
+@keyframes fact-stars-drift {
+  to {
+    transform: translateX(240px);
+  }
+}
+
+@keyframes fact-stars-drift-far {
+  to {
+    transform: translateX(170px);
+  }
+}
+
+@keyframes fact-stars-twinkle {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes fact-stars-twinkle-far {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* A comet that streaks across the panel every so often */
+.fact-comet {
+  position: absolute;
+  top: 18%;
+  left: 0;
+  width: 110px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(to right, transparent, rgb(var(--fact-color)), #ffffff);
+  opacity: 0;
+  animation: fact-comet 9s ease-in infinite;
+}
+
+@keyframes fact-comet {
+  0%,
+  72% {
+    opacity: 0;
+    transform: translate(-140px, 0) rotate(12deg);
+  }
+  76% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(1050px, 210px) rotate(12deg);
+  }
+}
+
+/* Pausing the facts also pauses the panel's sky */
+.space-fact.paused .fact-stars,
+.space-fact.paused .fact-comet {
+  animation-play-state: paused;
+}
+
+/* A bright line down the left edge */
+.space-fact::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  background: linear-gradient(to bottom, rgb(var(--fact-color)), rgba(var(--fact-color), 0.2));
+}
+
+.space-fact[data-category="NASA Milestone"] {
+  --fact-color: 255, 125, 100;
+}
+
+.space-fact[data-category="By the Numbers"] {
+  --fact-color: 90, 200, 255;
+}
+
+.space-fact[data-category="Look Up Tonight"] {
+  --fact-color: 190, 160, 255;
 }
 
 .fact-title {
@@ -250,19 +381,43 @@ input[type="date"] {
   gap: 10px;
 }
 
-/* A small red dot that gently pulses, like NASA's live updates panel */
+/* A small planet circling a bright point, instead of a plain dot */
 .live-dot {
+  position: relative;
   flex-shrink: 0;
-  width: 9px;
-  height: 9px;
-  background-color: var(--nasa-red);
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(var(--fact-color), 0.55);
   border-radius: 50%;
-  animation: live-pulse 2s ease-in-out infinite;
+  animation: live-orbit 3s linear infinite;
 }
 
-@keyframes live-pulse {
-  50% {
-    box-shadow: 0 0 0 5px rgba(252, 61, 33, 0.28);
+/* The bright point in the middle */
+.live-dot::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  box-shadow: 0 0 6px 1px rgb(var(--fact-color));
+}
+
+/* The planet on the ring */
+.live-dot::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: rgb(var(--fact-color));
+  box-shadow: 0 0 6px rgb(var(--fact-color));
+}
+
+@keyframes live-orbit {
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -275,21 +430,79 @@ input[type="date"] {
 }
 
 .space-fact h2 {
-  font-family: var(--font-mono);
+  font-family: 'Orbitron', var(--font-mono);
   font-size: 13px;
-  font-weight: 400;
-  letter-spacing: 0.16em;
+  font-weight: 600;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(var(--fact-color), 0.7);
+  color: rgb(var(--fact-color));
 }
 
-/* Reserve room for the longest item so the gallery doesn't jump when items change */
+/* The fact itself: big and bold. The height holds the longest item (5 lines on phones),
+   so the gallery doesn't jump when items change. */
 .fact-body {
-  min-height: 6em;
+  min-height: 6.5em;
+  margin-top: 8px;
+  font-family: 'Space Grotesk', var(--font-main);
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
 }
 
 @media (min-width: 700px) {
   .fact-body {
-    min-height: 3em;
+    min-height: 3.9em;
+    font-size: 25px;
+  }
+}
+
+/* On wide screens, the longest item only needs 2 lines */
+@media (min-width: 960px) {
+  .fact-body {
+    min-height: 2.6em;
+  }
+}
+
+/* Each word rises and fades in, one after another */
+.fact-word {
+  display: inline-block;
+  animation: fact-word-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@keyframes fact-word-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.45em);
+  }
+}
+
+/* The key phrase shimmers like starlight, in this item's color */
+.fact-word.fact-highlight {
+  font-weight: 700;
+  color: rgb(var(--fact-color));
+  text-shadow: none;
+  background-image: linear-gradient(100deg, rgb(var(--fact-color)) 30%, #ffffff 50%, rgb(var(--fact-color)) 70%);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 7px rgba(var(--fact-color), 0.65));
+  animation-name: fact-word-in, fact-shimmer;
+  animation-duration: 0.5s, 3.5s;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1), linear;
+  animation-iteration-count: 1, infinite;
+  animation-fill-mode: backwards, none;
+}
+
+@keyframes fact-shimmer {
+  from {
+    background-position: 130% 0;
+  }
+  to {
+    background-position: -30% 0;
   }
 }
 
@@ -311,14 +524,14 @@ input[type="date"] {
   font-family: var(--font-mono);
   font-size: 12px;
   color: #ffffff;
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(6, 8, 22, 0.6);
+  border: 1px solid rgba(var(--fact-color), 0.55);
   border-radius: 4px;
   cursor: pointer;
 }
 
 .fact-pause:hover {
-  background-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(var(--fact-color), 0.2);
 }
 
 /* Gallery grid: one column on phones, two on tablets, three on wide screens */
@@ -437,8 +650,15 @@ input[type="date"] {
   }
 
   .nebula,
-  .live-dot {
+  .live-dot,
+  .fact-stars,
+  .fact-word,
+  .fact-word.fact-highlight {
     animation: none;
+  }
+
+  .fact-comet {
+    display: none;
   }
 
   .gallery-item:hover img,
@@ -533,6 +753,111 @@ input[type="date"] {
 .placeholder-icon {
   font-size: 40px;
   margin-bottom: 8px;
+}
+
+/* Loading animation: a glowing sun with planets circling it */
+.loader {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  margin: 8px auto 20px;
+}
+
+/* Each orbit is a thin ring with a fading tail, and a planet at the front of the tail.
+   The mask cuts out the middle so only the outer edge of the circle shows. */
+.loader-orbit {
+  position: absolute;
+  border-radius: 50%;
+  animation: loader-spin linear infinite;
+}
+
+.loader-orbit::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 55%, var(--orbit-color));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+}
+
+.loader-orbit::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: var(--planet-size);
+  height: var(--planet-size);
+  margin: calc(var(--planet-size) / -2 + 1px) 0 0 calc(var(--planet-size) / -2);
+  border-radius: 50%;
+  background-color: var(--orbit-color);
+  box-shadow: 0 0 10px var(--orbit-color);
+}
+
+.orbit-outer {
+  --orbit-color: #5ac8ff;
+  --planet-size: 9px;
+  inset: 0;
+  animation-duration: 2.6s;
+}
+
+.orbit-middle {
+  --orbit-color: #fc3d21;
+  --planet-size: 11px;
+  inset: 20px;
+  animation-duration: 1.7s;
+}
+
+.orbit-inner {
+  --orbit-color: #ffd68c;
+  --planet-size: 6px;
+  inset: 39px;
+  animation-duration: 1.05s;
+}
+
+@keyframes loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loader-sun {
+  position: absolute;
+  inset: 54px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 15%, #ffd68c 55%, #ff8c3c);
+  box-shadow: 0 0 16px 4px rgba(255, 170, 90, 0.75);
+  animation: loader-glow 1.6s ease-in-out infinite;
+}
+
+@keyframes loader-glow {
+  50% {
+    transform: scale(1.14);
+    box-shadow: 0 0 28px 9px rgba(255, 170, 90, 0.85);
+  }
+}
+
+.loader-text {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.loader-subtext {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* For people who've asked their device to reduce motion, the orbits stay still */
+@media (prefers-reduced-motion: reduce) {
+  .loader-orbit,
+  .loader-sun {
+    animation: none;
+  }
 }
 
 /* Modal */
