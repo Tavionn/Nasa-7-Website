@@ -127,11 +127,13 @@ factPause.addEventListener('click', () => {
   setFactPaused(!isFactPaused);
 });
 
-// Hold the current item while someone is reading it with the mouse over it
-spaceFact.addEventListener('mouseenter', () => {
-  isFactHovered = true;
+// Hold the current item while someone is reading it with the mouse over it.
+// We only check for a real mouse, because a tap on a phone can count as hovering
+// and would stop the rotation until the person tapped somewhere else.
+spaceFact.addEventListener('pointerenter', (event) => {
+  isFactHovered = event.pointerType === 'mouse';
 });
-spaceFact.addEventListener('mouseleave', () => {
+spaceFact.addEventListener('pointerleave', () => {
   isFactHovered = false;
 });
 
