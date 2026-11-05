@@ -3,10 +3,19 @@
 const API_KEY = 'DEMO_KEY';
 const API_URL = 'https://api.nasa.gov/planetary/apod';
 
-// Sample APOD entries saved with this app. We use them if NASA's API is having problems.
+// NASA's science website also publishes every APOD. We use it if the API is having problems.
+const NASA_SCIENCE_URL = 'https://science.nasa.gov/wp-json/wp/v2/image-article';
+
+// How many entries to ask the science website for. Each one takes it about 0.2 seconds.
+const MAX_SCIENCE_ENTRIES = 45;
+
+// Sample APOD entries saved with this app. We use them only if both NASA sources are down.
 const BACKUP_URL = 'data/backup-entries.json';
 
-// Give up on a request if there's no answer after 20 seconds
+// Give up on the API quickly, because the science website can answer instead
+const API_TIMEOUT_MS = 8000;
+
+// Give up on other requests if there's no answer after 20 seconds
 const REQUEST_TIMEOUT_MS = 20000;
 
 // Everything the fact box can show. Each item has a label and some text.
@@ -203,7 +212,7 @@ function getThumbnailUrl(entry) {
 // Ask NASA for the entries between two dates
 async function fetchEntries(startDate, endDate) {
   const url = `${API_URL}?api_key=${API_KEY}&start_date=${startDate}&end_date=${endDate}&thumbs=true`;
-  const response = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  const response = await fetch(url, { signal: AbortSignal.timeout(API_TIMEOUT_MS) });
 
   // Today's date can be ahead of NASA's: it's based on UTC, and the newest photo may
   // not be posted yet. NASA rejects that end date, so try again one day earlier.
@@ -216,6 +225,66 @@ async function fetchEntries(startDate, endDate) {
   }
 
   return response.json();
+}
+
+// Turn one article from NASA's science website into the same shape the API uses
+function articleToEntry(article) {
+  // Each article is a page of HTML, so we read the parts we need out of it
+  const page = new DOMParser().parseFromString(article.content.rendered, 'text/html');
+  const heading = page.querySelector('h1');
+  const paragraphs = [...page.querySelectorAll('p')];
+  const explanation = paragraphs.find((paragraph) => paragraph.textContent.trim().startsWith('Explanation'));
+  const pageText = page.body.textContent.replace(/\s+/g, ' ');
+  const credit = pageText.match(/Date:? .*?Credit:? (.*?) Authors/);
+
+  const entry = {
+    date: article.date.slice(0, 10),
+    title: heading ? heading.textContent.trim() : article.slug,
+    explanation: explanation ? explanation.textContent.trim().replace(/^Explanation:?\s*/, '') : '',
+    // The credit can start with extra words like "Image Credit & Copyright:"
+    copyright: credit ? credit[1].replace(/^(Image|Video)?\s*(Credit)?\s*(&|and)?\s*(Copyright)?:?\s*/i, '').replace(/ ,/g, ',') : '',
+    media_type: 'other'
+  };
+
+  const iframe = page.querySelector('iframe');
+  const video = page.querySelector('video, video source');
+  const image = page.querySelector('img');
+
+  // NASA's smaller copy of the picture, unless it's just their generic stand-in image
+  const featured = article._embedded && article._embedded['wp:featuredmedia'] && article._embedded['wp:featuredmedia'][0];
+  const largeCopy = featured && featured.media_details && featured.media_details.sizes && featured.media_details.sizes.large;
+  const largeUrl = largeCopy && !largeCopy.source_url.includes('news-thumbnail') ? largeCopy.source_url : null;
+
+  if (iframe) {
+    entry.media_type = 'video';
+    entry.url = iframe.getAttribute('src');
+  } else if (video) {
+    entry.media_type = 'video';
+    entry.url = video.getAttribute('src');
+  } else if (largeUrl || image) {
+    entry.media_type = 'image';
+    entry.url = largeUrl || image.getAttribute('src');
+    entry.hdurl = entry.url.split('/jcr:content')[0].split('?')[0];
+  }
+
+  return entry;
+}
+
+// Get the entries between two dates from NASA's science website
+async function fetchNasaScienceEntries(startDate, endDate) {
+  const url = `${NASA_SCIENCE_URL}?search=apod&after=${getPreviousDay(startDate)}T23:59:59&before=${endDate}T23:59:59&per_page=${MAX_SCIENCE_ENTRIES}&_embed=wp:featuredmedia`;
+  const response = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  if (!response.ok) {
+    throw new Error(`NASA Science error ${response.status}`);
+  }
+
+  // The search can also find articles that only mention APOD, so keep just the real ones
+  const articles = await response.json();
+  return {
+    entries: articles.filter((article) => article.slug.startsWith('apod-')).map(articleToEntry),
+    // It sends the newest ones first, so a long range can be cut short
+    isCutShort: Number(response.headers.get('X-WP-TotalPages')) > 1
+  };
 }
 
 // Sometimes NASA's API answers with its website logo in place of every photo
@@ -232,31 +301,31 @@ async function fetchBackupEntries() {
   return response.json();
 }
 
-// Try NASA's API first, and use the backup if it's down, over its limit, or sending placeholders
+// Try NASA's API first, then NASA's science website, and the sample entries as a last resort.
+// Gives back the entries, and a note to show above them if there's something to explain.
 async function getEntries(startDate, endDate) {
   try {
     const entries = await fetchEntries(startDate, endDate);
     if (!isPlaceholderData(entries)) {
-      return { entries, usedBackup: false };
+      return { entries, notice: '' };
     }
   } catch (error) {
-    // A 400 or 404 means NASA has nothing for those dates, so the user should pick new ones
-    if (error.cause === 400 || error.cause === 404) {
-      throw error;
-    }
+    console.error(error);
+  }
+
+  try {
+    const { entries, isCutShort } = await fetchNasaScienceEntries(startDate, endDate);
+    const notice = isCutShort ? `That's a long date range, so these are the newest ${MAX_SCIENCE_ENTRIES} entries.` : '';
+    return { entries, notice };
+  } catch (error) {
     console.error(error);
   }
 
   const entries = await fetchBackupEntries();
-  return { entries, usedBackup: true };
-}
-
-// Pick a helpful message for whatever went wrong
-function getErrorMessage(error) {
-  if (error.cause === 400 || error.cause === 404) {
-    return 'NASA couldn\'t find images for those dates. Please try a different range.';
-  }
-  return 'We couldn\'t reach NASA. Please check your connection and try again in a few minutes.';
+  return {
+    entries,
+    notice: 'NASA\'s image services aren\'t responding right now, so these are sample entries and may not match your dates.'
+  };
 }
 
 // Shorten NASA's explanation for the feature card, stopping at the end of a word
@@ -298,15 +367,13 @@ function createCard(entry, index) {
 }
 
 // Replace whatever is in the gallery with cards for these entries
-function renderGallery(entries, usedBackup) {
+function renderGallery(entries, notice) {
   // Show the newest entries first
   currentEntries = [...entries].sort((a, b) => b.date.localeCompare(a.date));
 
-  // If these are sample entries, say so, because they won't match the chosen dates
-  const notice = usedBackup
-    ? '<p class="backup-notice" role="status">NASA\'s live API isn\'t sending photos right now, so these are sample entries and may not match your dates.</p>'
-    : '';
-  gallery.innerHTML = notice + currentEntries.map(createCard).join('');
+  // Any note goes above the cards
+  const noticeHtml = notice ? `<p class="backup-notice" role="status">${notice}</p>` : '';
+  gallery.innerHTML = noticeHtml + currentEntries.map(createCard).join('');
 
   // If a picture fails to load, show the telescope icon instead of a broken image
   gallery.querySelectorAll('img').forEach((image) => {
@@ -337,22 +404,22 @@ async function loadGallery() {
   const bigBangReady = isBigBang ? playBigBang() : Promise.resolve();
 
   try {
-    const { entries, usedBackup } = await getEntries(startDate, endDate);
+    const { entries, notice } = await getEntries(startDate, endDate);
 
     // Wait for the explosion, so the photos appear out of it
     await bigBangReady;
 
     if (entries.length === 0) {
-      showMessage('🌌', 'No entries found for those dates. Please try a different range.');
+      showMessage('🌌', 'NASA has no entries for those dates. Please try a different range.');
     } else {
-      renderGallery(entries, usedBackup);
+      renderGallery(entries, notice);
       if (isBigBang) {
         launchCardsFromCenter();
       }
     }
   } catch (error) {
     console.error(error);
-    showMessage('🛰️', getErrorMessage(error));
+    showMessage('🛰️', 'We couldn\'t reach NASA. Please check your connection and try again in a few minutes.');
   } finally {
     getImagesButton.disabled = false;
   }
