@@ -416,3 +416,438 @@ modal.addEventListener('close', () => {
     modalMedia.innerHTML = '';
   }
 });
+
+// ----- Animated space background -----
+
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// --- The nebula ---
+// This is a small program (a "shader") that runs on the graphics card and works out
+// the color of every pixel. It layers random noise to make wispy, flowing shapes:
+// cyan threads along a wavy band, crimson clouds under it, and dark red haze above.
+const NEBULA_SHADER = `
+  #ifdef GL_FRAGMENT_PRECISION_HIGH
+  precision highp float;
+  #else
+  precision mediump float;
+  #endif
+
+  uniform vec2 uResolution;
+  uniform float uTime;
+
+  // A random number for each point on a grid
+  float random(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+  }
+
+  // Smooth random values between the grid points
+  float noise(vec2 p) {
+    vec2 cell = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(
+      mix(random(cell), random(cell + vec2(1.0, 0.0)), f.x),
+      mix(random(cell + vec2(0.0, 1.0)), random(cell + vec2(1.0, 1.0)), f.x),
+      f.y
+    );
+  }
+
+  const mat2 TURN = mat2(0.8, 0.6, -0.6, 0.8);
+
+  // Soft clouds: noise stacked at finer and finer sizes
+  float clouds(vec2 p) {
+    float value = 0.0;
+    float strength = 0.5;
+    for (int i = 0; i < 4; i++) {
+      value += strength * noise(p);
+      p = TURN * p * 2.02;
+      strength *= 0.5;
+    }
+    return value;
+  }
+
+  // Thin threads: the same idea, but keeping only the ridges of the noise
+  float threads(vec2 p) {
+    float value = 0.0;
+    float strength = 0.5;
+    for (int i = 0; i < 4; i++) {
+      value += strength * (1.0 - abs(2.0 * noise(p) - 1.0));
+      p = TURN * p * 2.1;
+      strength *= 0.5;
+    }
+    return value;
+  }
+
+  void main() {
+    vec2 screen = gl_FragCoord.xy / uResolution;
+    vec2 p = screen * vec2(uResolution.x / uResolution.y, 1.0) * 1.6;
+    float t = uTime * 0.025;
+
+    // Bend the space with clouds so the shapes look like flowing gas
+    vec2 q = vec2(clouds(p * 1.2 + vec2(0.0, t)), clouds(p * 1.2 + vec2(5.2, 1.3 - t)));
+    vec2 r = vec2(
+      clouds(p * 1.8 + 3.0 * q + vec2(1.7 + t * 0.7, 9.2)),
+      clouds(p * 1.8 + 3.0 * q + vec2(8.3, 2.8 - t * 0.5))
+    );
+
+    // How far each pixel is above (+) or below (-) the wavy band across the screen
+    float bandCenter = 0.62 - 0.20 * screen.x + 0.05 * sin(screen.x * 4.0 + t * 2.0) + (q.x - 0.5) * 0.16;
+    float d = screen.y - bandCenter;
+
+    // The bright cyan ribbon: fine threads over a soft glow, strongest along the band
+    float thin = pow(threads(p * 4.0 + r * 3.5), 6.0);
+    float hair = pow(threads(p * 11.0 + r * 5.0 + q * 3.0), 5.0);
+    float ribbon = exp(-d * d / 0.005);
+    float cyan = ribbon * (0.16 + thin * 2.6 + hair * 1.5);
+
+    // The crimson curtain: tangled threads hanging below the band
+    float below = (1.0 - smoothstep(-0.04, 0.02, d)) * smoothstep(-0.62, -0.06, d);
+    float fine = pow(threads(p * 7.0 + q * 5.0), 4.0);
+    float patches = smoothstep(0.28, 0.62, clouds(p * 2.5 + r * 2.5));
+    float crimson = below * patches * (0.14 + fine * 2.6 + hair * 1.0);
+
+    // Above the band: dark red haze with a few faint, stray threads
+    float above = smoothstep(0.0, 0.08, d);
+    float haze = above * (1.0 - smoothstep(0.1, 0.7, d)) * q.y;
+    float strays = above * pow(threads(p * 2.5 + r * 4.0 + 7.0), 9.0);
+
+    vec3 color = vec3(0.012, 0.01, 0.028);
+    color += vec3(0.26, 0.015, 0.06) * haze;
+    color += vec3(0.75, 0.10, 0.32) * strays * 2.0;
+    color += vec3(0.10, 0.45, 0.75) * strays * thin * 2.0;
+    color += vec3(0.95, 0.06, 0.24) * crimson;
+    color += vec3(0.08, 0.72, 0.95) * cyan;
+    color += vec3(0.7, 0.95, 1.0) * cyan * cyan * 0.22;
+
+    // Where the ribbon meets the curtain, the colors mix into a pink glow
+    color += vec3(0.85, 0.30, 0.55) * ribbon * below * (thin + fine) * 0.8;
+
+    gl_FragColor = vec4(color, 1.0);
+  }
+`;
+
+// The graphics card also needs this tiny program, which just covers the screen with a rectangle
+const COVER_SCREEN_SHADER = `
+  attribute vec2 position;
+  void main() {
+    gl_Position = vec4(position, 0.0, 1.0);
+  }
+`;
+
+const NEBULA_FRAME_MS = 33; // Redraw the slow-moving nebula about 30 times a second
+const SLOW_FRAME_MS = 50;
+const SLOW_FRAME_LIMIT = 40;
+
+const nebulaCanvas = document.getElementById('nebulaCanvas');
+let nebula = null;
+
+// Draw the nebula at lower resolution than the screen, since this is the demanding part
+let nebulaScale = 0.85;
+let lastNebulaTime = -NEBULA_FRAME_MS;
+let slowFrames = 0;
+
+// Set up the graphics card. Returns null on browsers that can't do this,
+// which leaves the plain .nebula background showing instead.
+function setupNebula() {
+  const gl = nebulaCanvas.getContext('webgl', { alpha: false, antialias: false });
+  if (!gl) {
+    nebulaCanvas.hidden = true;
+    return null;
+  }
+
+  const program = gl.createProgram();
+  [[gl.VERTEX_SHADER, COVER_SCREEN_SHADER], [gl.FRAGMENT_SHADER, NEBULA_SHADER]].forEach(([type, source]) => {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    gl.attachShader(program, shader);
+  });
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error(gl.getProgramInfoLog(program));
+    nebulaCanvas.hidden = true;
+    return null;
+  }
+  gl.useProgram(program);
+
+  // Two triangles that together cover the whole canvas
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+  const position = gl.getAttribLocation(program, 'position');
+  gl.enableVertexAttribArray(position);
+  gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+
+  return {
+    gl,
+    resolution: gl.getUniformLocation(program, 'uResolution'),
+    time: gl.getUniformLocation(program, 'uTime')
+  };
+}
+
+// Match the nebula canvas to the window size
+function sizeNebula() {
+  if (nebula) {
+    nebulaCanvas.width = Math.round(window.innerWidth * nebulaScale);
+    nebulaCanvas.height = Math.round(window.innerHeight * nebulaScale);
+    nebula.gl.viewport(0, 0, nebulaCanvas.width, nebulaCanvas.height);
+    nebula.gl.uniform2f(nebula.resolution, nebulaCanvas.width, nebulaCanvas.height);
+  }
+}
+
+function drawNebula(time) {
+  if (nebula) {
+    nebula.gl.uniform1f(nebula.time, time / 1000);
+    nebula.gl.drawArrays(nebula.gl.TRIANGLES, 0, 6);
+  }
+}
+
+// --- The stars ---
+
+const starCanvas = document.getElementById('starfield');
+const starContext = starCanvas.getContext('2d');
+
+// Three layers of stars. Bigger stars look closer, so they move faster.
+const STAR_LAYERS = [
+  { share: 0.72, size: 0.6, speed: 1.5 },
+  { share: 0.23, size: 1, speed: 3.5 },
+  { share: 0.05, size: 1.6, speed: 6 }
+];
+const STAR_COLORS = ['255, 255, 255', '255, 255, 255', '170, 200, 255', '255, 214, 170', '255, 170, 190'];
+const FLARE_COLORS = ['255, 225, 170', '120, 175, 255', '120, 175, 255', '255, 190, 130'];
+
+let stars = [];
+let flareStars = [];
+let starWidth = 0;
+let starHeight = 0;
+let shootingStar = null;
+let nextShootingStarTime = 3000;
+let lastFrameTime = 0;
+
+// Pick a random number between two values
+function randomBetween(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+// Pick a random item from a list
+function randomItem(list) {
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+// Size the canvas to the window and scatter the stars across it
+function setupStars() {
+  starWidth = window.innerWidth;
+  starHeight = window.innerHeight;
+
+  // Sharper stars on high-resolution screens
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  starCanvas.width = starWidth * pixelRatio;
+  starCanvas.height = starHeight * pixelRatio;
+  starCanvas.style.width = `${starWidth}px`;
+  starCanvas.style.height = `${starHeight}px`;
+  starContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+
+  // Bigger windows get more stars, up to a limit
+  const starCount = Math.min(1100, Math.round((starWidth * starHeight) / 1100));
+  stars = [];
+  STAR_LAYERS.forEach((layer) => {
+    for (let i = 0; i < starCount * layer.share; i++) {
+      stars.push({
+        x: Math.random() * starWidth,
+        y: Math.random() * starHeight,
+        size: layer.size * randomBetween(0.8, 1.3),
+        speed: layer.speed,
+        color: randomItem(STAR_COLORS),
+        twinkleSpeed: randomBetween(0.0005, 0.002),
+        twinkleOffset: Math.random() * Math.PI * 2
+      });
+    }
+  });
+
+  // A few big, bright stars with glowing crosses of light
+  const flareCount = Math.max(3, Math.min(9, Math.round(starWidth / 180)));
+  flareStars = [];
+  for (let i = 0; i < flareCount; i++) {
+    flareStars.push({
+      x: Math.random() * starWidth,
+      y: Math.random() * starHeight,
+      // The first one is the big star of the scene
+      size: i === 0 ? 46 : randomBetween(12, 24),
+      color: randomItem(FLARE_COLORS),
+      speed: 1,
+      twinkleSpeed: randomBetween(0.0006, 0.0014),
+      twinkleOffset: Math.random() * Math.PI * 2
+    });
+  }
+}
+
+// Draw every small star, gently changing its brightness over time so it twinkles
+function drawStars(time) {
+  stars.forEach((star) => {
+    const brightness = 0.7 + 0.3 * Math.sin(time * star.twinkleSpeed + star.twinkleOffset);
+    starContext.fillStyle = `rgba(${star.color}, ${brightness})`;
+    starContext.beginPath();
+    starContext.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+    starContext.fill();
+  });
+}
+
+// Draw one thin beam of light from a flare star, fading out toward its tip
+function drawFlareBeam(star, endX, endY, brightness) {
+  const beam = starContext.createLinearGradient(star.x, star.y, endX, endY);
+  beam.addColorStop(0, `rgba(${star.color}, ${brightness})`);
+  beam.addColorStop(1, `rgba(${star.color}, 0)`);
+  starContext.strokeStyle = beam;
+  starContext.beginPath();
+  starContext.moveTo(star.x, star.y);
+  starContext.lineTo(endX, endY);
+  starContext.stroke();
+}
+
+// Draw the big stars: a soft glow, a bright center, and a slowly pulsing cross of light
+function drawFlareStars(time) {
+  starContext.lineWidth = 1;
+  flareStars.forEach((star) => {
+    const pulse = 0.8 + 0.2 * Math.sin(time * star.twinkleSpeed + star.twinkleOffset);
+    const length = star.size * 1.6 * pulse;
+
+    const glow = starContext.createRadialGradient(star.x, star.y, 0, star.x, star.y, star.size * 0.7);
+    glow.addColorStop(0, `rgba(255, 255, 255, ${pulse})`);
+    glow.addColorStop(0.12, `rgba(255, 255, 255, ${0.9 * pulse})`);
+    glow.addColorStop(0.3, `rgba(${star.color}, ${0.5 * pulse})`);
+    glow.addColorStop(1, `rgba(${star.color}, 0)`);
+    starContext.fillStyle = glow;
+    starContext.beginPath();
+    starContext.arc(star.x, star.y, star.size * 0.7, 0, Math.PI * 2);
+    starContext.fill();
+
+    drawFlareBeam(star, star.x + length, star.y - length * 0.25, pulse);
+    drawFlareBeam(star, star.x - length, star.y + length * 0.25, pulse);
+    drawFlareBeam(star, star.x + length * 0.25, star.y + length, pulse);
+    drawFlareBeam(star, star.x - length * 0.25, star.y - length, pulse);
+  });
+}
+
+// Move the stars slowly down the screen, wrapping back to the top at the bottom
+function moveStars(list, seconds) {
+  list.forEach((star) => {
+    star.y += star.speed * seconds;
+    if (star.y > starHeight) {
+      star.y = 0;
+      star.x = Math.random() * starWidth;
+    }
+  });
+}
+
+// Start a shooting star near the top of the screen, heading down and to one side
+function launchShootingStar() {
+  const direction = Math.random() < 0.5 ? 1 : -1;
+  const speed = randomBetween(600, 900);
+  shootingStar = {
+    x: randomBetween(starWidth * 0.1, starWidth * 0.9),
+    y: randomBetween(0, starHeight * 0.4),
+    speedX: direction * speed * 0.85,
+    speedY: speed * 0.5,
+    age: 0,
+    lifetime: randomBetween(0.6, 1.1)
+  };
+}
+
+// Move and draw the shooting star, with a tail that fades out behind it
+function drawShootingStar(seconds) {
+  shootingStar.x += shootingStar.speedX * seconds;
+  shootingStar.y += shootingStar.speedY * seconds;
+  shootingStar.age += seconds;
+
+  if (shootingStar.age >= shootingStar.lifetime) {
+    shootingStar = null;
+    return;
+  }
+
+  const fade = 1 - shootingStar.age / shootingStar.lifetime;
+  const tailX = shootingStar.x - shootingStar.speedX * 0.18;
+  const tailY = shootingStar.y - shootingStar.speedY * 0.18;
+  const tail = starContext.createLinearGradient(shootingStar.x, shootingStar.y, tailX, tailY);
+  tail.addColorStop(0, `rgba(255, 255, 255, ${fade})`);
+  tail.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+  starContext.strokeStyle = tail;
+  starContext.lineWidth = 2;
+  starContext.beginPath();
+  starContext.moveTo(shootingStar.x, shootingStar.y);
+  starContext.lineTo(tailX, tailY);
+  starContext.stroke();
+}
+
+// --- Running the animation ---
+
+// If this device is struggling, draw the nebula at a lower resolution to keep things smooth
+function checkSpeed(frameTime) {
+  if (frameTime > SLOW_FRAME_MS && frameTime < 1000) {
+    slowFrames++;
+  }
+  if (slowFrames > SLOW_FRAME_LIMIT && nebulaScale > 0.4) {
+    nebulaScale = 0.4;
+    sizeNebula();
+  }
+}
+
+// Draw one frame of the animation, then ask the browser for the next one
+function animateBackground(time) {
+  checkSpeed(time - lastFrameTime);
+
+  // Limit the time step so nothing jumps after switching back from another tab
+  const seconds = Math.min((time - lastFrameTime) / 1000, 0.1);
+  lastFrameTime = time;
+
+  if (time - lastNebulaTime >= NEBULA_FRAME_MS) {
+    drawNebula(time);
+    lastNebulaTime = time;
+  }
+
+  starContext.clearRect(0, 0, starWidth, starHeight);
+  moveStars(stars, seconds);
+  moveStars(flareStars, seconds);
+  drawStars(time);
+  drawFlareStars(time);
+
+  if (!shootingStar && time > nextShootingStarTime) {
+    launchShootingStar();
+    nextShootingStarTime = time + randomBetween(5000, 14000);
+  }
+  if (shootingStar) {
+    drawShootingStar(seconds);
+  }
+
+  requestAnimationFrame(animateBackground);
+}
+
+// Draw a single still picture, for people who've asked their device to reduce motion
+function drawStillBackground() {
+  drawNebula(0);
+  drawStars(0);
+  drawFlareStars(0);
+}
+
+nebula = setupNebula();
+sizeNebula();
+setupStars();
+
+if (prefersReducedMotion) {
+  drawStillBackground();
+} else {
+  requestAnimationFrame(animateBackground);
+}
+
+// Redo the background if the window gets wider or taller. Phones change height a little
+// while scrolling, as the address bar hides, and that shouldn't reshuffle the stars.
+window.addEventListener('resize', () => {
+  if (window.innerWidth !== starWidth || window.innerHeight > starHeight) {
+    sizeNebula();
+    setupStars();
+    if (prefersReducedMotion) {
+      drawStillBackground();
+    }
+  }
+});

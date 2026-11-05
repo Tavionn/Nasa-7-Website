@@ -10,6 +10,14 @@
   <link href="style.css" rel="stylesheet" type="text/css" />
 </head>
 <body>
+  <!-- Animated space background, drawn by script.js: a glowing nebula with stars on top.
+       The plain .nebula layer only shows on browsers that can't draw the animated one. -->
+  <div class="space-bg" aria-hidden="true">
+    <div class="nebula"></div>
+    <canvas id="nebulaCanvas"></canvas>
+    <canvas id="starfield"></canvas>
+  </div>
+
   <div class="container">
     <header class="site-header">
       <img src="img/nasa-worm-logo.png" alt="NASA Logo" class="logo" />
