@@ -259,22 +259,40 @@ function getErrorMessage(error) {
   return 'We couldn\'t reach NASA. Please check your connection and try again in a few minutes.';
 }
 
-// Build the HTML for one gallery card
+// Shorten NASA's explanation for the feature card, stopping at the end of a word
+function getSummary(text) {
+  if (text.length <= 150) {
+    return text;
+  }
+  return `${text.slice(0, 150).replace(/\s+\S*$/, '')}…`;
+}
+
+// Build the HTML for one gallery card. The first card is the big feature card.
 function createCard(entry, index) {
   const thumbnailUrl = getThumbnailUrl(entry);
-  const isVideo = entry.media_type !== 'image';
-  const badgeText = entry.media_type === 'video' ? '▶ Video' : '↗ Interactive';
+  const isFeature = index === 0;
+  const isVideo = entry.media_type === 'video';
+
+  let labelText = '↗ Interactive';
+  if (entry.media_type === 'image') {
+    labelText = 'Image';
+  } else if (isVideo) {
+    labelText = '▶ Video';
+  }
 
   return `
-    <button type="button" class="gallery-item" data-index="${index}">
+    <button type="button" class="gallery-item ${isFeature ? 'feature' : ''}" data-index="${index}">
       <span class="media-frame">
         ${thumbnailUrl
           ? `<img src="${escapeHtml(thumbnailUrl)}" alt="${escapeHtml(entry.title)}" loading="lazy" />`
           : '<span class="no-thumbnail" aria-hidden="true">🔭</span>'}
-        ${isVideo ? `<span class="video-badge">${badgeText}</span>` : ''}
       </span>
-      <span class="item-title">${escapeHtml(entry.title)}</span>
-      <span class="date">${formatDate(entry.date)}</span>
+      <span class="card-label ${isVideo ? 'video' : ''}">${labelText}</span>
+      <span class="card-text">
+        <span class="item-title">${escapeHtml(entry.title)}</span>
+        ${isFeature && entry.explanation ? `<span class="card-summary">${escapeHtml(getSummary(entry.explanation))}</span>` : ''}
+        <span class="date">${formatDate(entry.date)}</span>
+      </span>
     </button>
   `;
 }
@@ -375,15 +393,15 @@ function createModalLink(entry) {
 
   if (entry.media_type === 'image') {
     const fullSizeUrl = fixUrl(entry.hdurl) || url;
-    return `<a href="${escapeHtml(fullSizeUrl)}" target="_blank" rel="noopener">View full resolution image ↗</a>`;
+    return `<a href="${escapeHtml(fullSizeUrl)}" target="_blank" rel="noopener">View full resolution image <span class="link-arrow" aria-hidden="true">→</span></a>`;
   }
   if (youTubeId) {
-    return `<a href="https://www.youtube.com/watch?v=${youTubeId}" target="_blank" rel="noopener">▶ Watch on YouTube ↗</a>`;
+    return `<a href="https://www.youtube.com/watch?v=${youTubeId}" target="_blank" rel="noopener">▶ Watch on YouTube <span class="link-arrow" aria-hidden="true">→</span></a>`;
   }
   if (entry.media_type === 'video' && url) {
-    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">▶ Watch the video ↗</a>`;
+    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">▶ Watch the video <span class="link-arrow" aria-hidden="true">→</span></a>`;
   }
-  return `<a href="${getApodPageUrl(entry.date)}" target="_blank" rel="noopener">View this entry on NASA's APOD site ↗</a>`;
+  return `<a href="${getApodPageUrl(entry.date)}" target="_blank" rel="noopener">View this entry on NASA's APOD site <span class="link-arrow" aria-hidden="true">→</span></a>`;
 }
 
 // Fill the modal with one entry and open it
