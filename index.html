@@ -10,12 +10,14 @@
   <link href="style.css" rel="stylesheet" type="text/css" />
 </head>
 <body>
-  <!-- Animated space background, drawn by script.js: a glowing nebula with stars on top.
+  <!-- Animated space background, drawn by script.js: a journey through space.
+       The stars sit behind the scenes so planets can pass in front of them.
        The plain .nebula layer only shows on browsers that can't draw the animated one. -->
   <div class="space-bg" aria-hidden="true">
     <div class="nebula"></div>
-    <canvas id="nebulaCanvas"></canvas>
     <canvas id="starfield"></canvas>
+    <canvas id="nebulaCanvas"></canvas>
+    <p id="sceneCaption" class="scene-caption"></p>
   </div>
 
   <div class="container">
@@ -69,6 +71,9 @@
       </div>
     </div>
   </dialog>
+
+  <!-- The Big Bang plays on this canvas, on top of the page, the first time images load -->
+  <canvas id="bigBangCanvas" class="big-bang" aria-hidden="true" hidden></canvas>
 
   <script src="js/dateRange.js"></script>
   <script src="js/script.js"></script>

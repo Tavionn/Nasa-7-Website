@@ -66,6 +66,9 @@ const modalLink = document.getElementById('modalLink');
 // Holds the entries currently in the gallery, so a click can find its entry
 let currentEntries = [];
 
+// The Big Bang only plays the first time images are loaded
+let hasBigBangPlayed = false;
+
 // Call the setupDateInputs function from dateRange.js
 // This sets up the date pickers to:
 // - Default to a range of 9 days (from 9 days ago to today)
@@ -309,12 +312,25 @@ async function loadGallery() {
   showMessage('🔄', 'Loading space photos…');
   getImagesButton.disabled = true;
 
+  // The first time, start the Big Bang while the photos load in the background.
+  // Skip it for people who've asked their device to reduce motion.
+  const isBigBang = !hasBigBangPlayed && !prefersReducedMotion;
+  hasBigBangPlayed = true;
+  const bigBangReady = isBigBang ? playBigBang() : Promise.resolve();
+
   try {
     const { entries, usedBackup } = await getEntries(startDate, endDate);
+
+    // Wait for the explosion, so the photos appear out of it
+    await bigBangReady;
+
     if (entries.length === 0) {
       showMessage('🌌', 'No entries found for those dates. Please try a different range.');
     } else {
       renderGallery(entries, usedBackup);
+      if (isBigBang) {
+        launchCardsFromCenter();
+      }
     }
   } catch (error) {
     console.error(error);
@@ -421,10 +437,15 @@ modal.addEventListener('close', () => {
 
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// --- The nebula ---
+// --- The scenes ---
 // This is a small program (a "shader") that runs on the graphics card and works out
-// the color of every pixel. It layers random noise to make wispy, flowing shapes:
-// cyan threads along a wavy band, crimson clouds under it, and dark red haze above.
+// the color of every pixel. It layers random noise to make wispy, flowing shapes, and
+// draws five scenes: Earth, an alien world, a nebula, a black hole, and a spiral galaxy.
+// uSceneA is the scene we're leaving and uSceneB is the next one. uBlend says how far
+// the jump between them has got: 0 is still at A, and 1 has arrived at B.
+//
+// Each scene gives back a color and an "alpha". Glowing gas has alpha 0, so the stars
+// behind it shine through. Solid things like planets have alpha 1, so they hide the stars.
 const NEBULA_SHADER = `
   #ifdef GL_FRAGMENT_PRECISION_HIGH
   precision highp float;
@@ -434,6 +455,9 @@ const NEBULA_SHADER = `
 
   uniform vec2 uResolution;
   uniform float uTime;
+  uniform float uBlend;
+  uniform int uSceneA;
+  uniform int uSceneB;
 
   // A random number for each point on a grid
   float random(vec2 p) {
@@ -480,11 +504,8 @@ const NEBULA_SHADER = `
     return value;
   }
 
-  void main() {
-    vec2 screen = gl_FragCoord.xy / uResolution;
-    vec2 p = screen * vec2(uResolution.x / uResolution.y, 1.0) * 1.6;
-    float t = uTime * 0.025;
-
+  // Scene 1: cyan threads along a wavy band, crimson clouds under it, dark red haze above
+  vec3 nebulaScene(vec2 screen, vec2 p, float t) {
     // Bend the space with clouds so the shapes look like flowing gas
     vec2 q = vec2(clouds(p * 1.2 + vec2(0.0, t)), clouds(p * 1.2 + vec2(5.2, 1.3 - t)));
     vec2 r = vec2(
@@ -524,7 +545,231 @@ const NEBULA_SHADER = `
     // Where the ribbon meets the curtain, the colors mix into a pink glow
     color += vec3(0.85, 0.30, 0.55) * ribbon * below * (thin + fine) * 0.8;
 
-    gl_FragColor = vec4(color, 1.0);
+    return color;
+  }
+
+  // Scene 2: a tilted spiral galaxy with a golden center and blue arms
+  vec3 galaxyScene(vec2 screen, vec2 p, float aspect, float t) {
+    vec2 v = (screen - vec2(0.5, 0.52)) * vec2(aspect, 1.0);
+
+    // Shrink it on narrow screens so it still fits
+    v /= clamp(aspect, 0.6, 1.0);
+
+    // Tilt it by turning it, then squashing it
+    v = mat2(0.88, 0.47, -0.47, 0.88) * v;
+    v.y *= 1.8;
+
+    float radius = length(v) + 0.001;
+
+    // Twist the space more toward the center, and keep slowly turning it, to make the spiral
+    float twist = 2.8 * log(radius) - t * 1.5;
+    float c = cos(twist);
+    float s = sin(twist);
+    vec2 twisted = mat2(c, s, -s, c) * v;
+
+    // Two spiral arms, roughened by clouds so they aren't too perfect
+    float gas = clouds(twisted * 6.0 + 4.0);
+    float angle = atan(v.y, v.x) + twist;
+    float arms = pow(0.5 + 0.5 * cos(2.0 * angle + (gas - 0.5) * 3.0), 2.2);
+    float disk = exp(-radius * 3.0);
+    float glow = arms * disk * (0.5 + gas * 2.4);
+
+    // Dark dust lanes and pink star-forming clouds along the arms
+    float dust = pow(threads(twisted * 7.0 + 2.0), 4.0);
+    float knots = pow(threads(twisted * 12.0 + 9.0), 9.0);
+
+    vec3 color = vec3(0.012, 0.012, 0.038);
+    color += vec3(0.07, 0.04, 0.16) * clouds(p * 1.2 + vec2(t, 3.0));
+    color += vec3(0.22, 0.45, 1.0) * glow * (1.0 - dust * 0.75);
+    color += vec3(0.75, 0.82, 1.0) * glow * glow * 0.35;
+    color += vec3(1.0, 0.18, 0.45) * knots * arms * disk * 5.0;
+
+    // The bright center
+    color += vec3(1.0, 0.62, 0.32) * exp(-radius * 8.0) * 0.8;
+    color += vec3(1.0, 0.88, 0.68) * exp(-radius * radius * 90.0) * 1.3;
+
+    return color;
+  }
+
+  // Put a solid or see-through layer on top of what's already been drawn
+  vec4 layerOver(vec4 under, vec3 color, float amount) {
+    return vec4(color * amount + under.rgb * (1.0 - amount), amount + under.a * (1.0 - amount));
+  }
+
+  // Earth from orbit: a huge curved planet with sunrise breaking over its edge
+  vec4 earthScene(vec2 screen, float aspect, float t) {
+    vec2 v = (screen - vec2(0.6, -0.95)) * vec2(aspect, 1.0);
+    float size = 1.4;
+    float dist = length(v);
+    vec2 sunDirection = normalize(vec2(0.3, 0.95));
+    vec3 sunlight = normalize(vec3(sunDirection, 0.18));
+    float limb = dot(normalize(v), sunDirection);
+
+    vec4 scene = vec4(vec3(0.004, 0.008, 0.025), 0.0);
+
+    // The thin blue atmosphere glowing beyond the planet's edge
+    float outside = max(dist - size, 0.0);
+    scene.rgb += vec3(0.16, 0.45, 1.0) * exp(-outside * 20.0) * (0.12 + pow(max(limb, 0.0), 3.0) * 1.1);
+
+    if (dist < size + 0.004) {
+      vec3 normal = vec3(v / size, sqrt(max(1.0 - dot(v, v) / (size * size), 0.0)));
+      vec2 surface = normal.xy / (1.0 + normal.z) * 2.5 + vec2(t * 0.5, 0.0);
+
+      float land = smoothstep(0.46, 0.52, clouds(surface * 2.2 + 3.0));
+      vec3 ground = mix(vec3(0.015, 0.09, 0.28), mix(vec3(0.09, 0.22, 0.07), vec3(0.33, 0.26, 0.13), clouds(surface * 6.0)), land);
+      float cover = smoothstep(0.42, 0.72, clouds(surface * 3.5 + vec2(t * 0.8, 5.0) + 0.5 * clouds(surface * 2.0)));
+
+      float light = clamp(dot(normal, sunlight) * 1.15 + 0.03, 0.0, 1.0);
+      vec3 planet = mix(ground, vec3(0.9), cover * 0.85) * light;
+
+      // City lights on the night side
+      float night = 1.0 - smoothstep(0.0, 0.25, light);
+      planet += vec3(1.0, 0.68, 0.32) * night * land * (1.0 - cover) * pow(noise(surface * 55.0), 7.0) * 1.8;
+
+      // The atmosphere near the edge of the planet
+      planet += vec3(0.2, 0.5, 1.0) * pow(1.0 - normal.z, 2.5) * (light + 0.03) * 1.2;
+
+      scene = layerOver(scene, planet, 1.0 - smoothstep(size - 0.003, size + 0.003, dist));
+    }
+
+    // Sunrise: an orange line along the edge, and the sun's glare where it comes up
+    scene.rgb += vec3(1.0, 0.55, 0.25) * exp(-abs(dist - size) * 90.0) * pow(max(limb, 0.0), 7.0);
+    float fromSun = length(v - sunDirection * size);
+    scene.rgb += vec3(1.0, 0.82, 0.58) * exp(-fromSun * 8.0) * 0.75;
+    scene.rgb += vec3(1.0, 0.97, 0.9) * exp(-fromSun * fromSun * 700.0) * 2.0;
+
+    return scene;
+  }
+
+  // An alien world: black mountains, a violet sky, and a huge dark planet in eclipse
+  vec4 alienScene(vec2 screen, float aspect, float t) {
+    float x = screen.x * aspect;
+    vec2 v = (screen - vec2(0.5, 0.68 + 0.015 * sin(t * 3.0))) * vec2(aspect, 1.0);
+    float size = 0.25 * clamp(aspect, 0.6, 1.0);
+    float dist = length(v);
+
+    float farPeaks = 0.23 + 0.17 * threads(vec2(x * 2.2 + 11.0, 3.0));
+    float nearPeaks = 0.06 + 0.2 * threads(vec2(x * 1.4 + 2.0, 8.0));
+    float height = screen.y - farPeaks;
+
+    // The glowing sky, brightest and pinkest along the horizon
+    vec4 scene = vec4(vec3(0.02, 0.012, 0.05), 0.0);
+    scene.rgb += vec3(0.32, 0.14, 0.72) * exp(-max(height, 0.0) * 3.5) * 0.75;
+    scene.rgb += vec3(1.0, 0.42, 0.72) * exp(-max(height, 0.0) * 13.0) * 0.8;
+
+    // The planet: a violet glow behind it, a dark solid disc with faint bands, and a bright ring
+    float lit = 0.25 + 0.75 * max(dot(normalize(v), normalize(vec2(0.45, -0.8))), 0.0);
+    scene.rgb += vec3(0.5, 0.3, 1.0) * exp(-max(dist - size, 0.0) * 13.0) * lit * 0.45;
+    vec3 disc = vec3(0.03, 0.02, 0.07) + vec3(0.05, 0.03, 0.1) * clouds(vec2(v.x * 3.0 + t, v.y * 18.0));
+    scene = layerOver(scene, disc, 1.0 - smoothstep(size - 0.002, size + 0.002, dist));
+    scene.rgb += vec3(0.85, 0.8, 1.0) * exp(-abs(dist - size) * 110.0) * lit * 1.6;
+
+    // Drifting mist in front of the far mountains
+    scene = layerOver(scene, vec3(0.09, 0.05, 0.2), 1.0 - smoothstep(-0.012, 0.012, height));
+    float mist = clouds(vec2(x * 2.0 + t * 2.0, screen.y * 7.0));
+    scene.rgb += vec3(0.75, 0.35, 0.8) * mist * exp(-abs(screen.y - nearPeaks - 0.07) * 13.0) * 0.32;
+
+    // The near mountains, nearly black
+    scene = layerOver(scene, vec3(0.012, 0.008, 0.028), 1.0 - smoothstep(-0.01, 0.01, screen.y - nearPeaks));
+
+    return scene;
+  }
+
+  // A black hole: a dark center ringed by a blazing, swirling disk of gas
+  vec4 blackHoleScene(vec2 screen, vec2 p, float aspect, float t) {
+    vec2 v = (screen - vec2(0.5, 0.52)) * vec2(aspect, 1.0);
+    v /= clamp(aspect, 0.6, 1.0);
+    float size = 0.15;
+    float dist = length(v);
+
+    // The disk is tilted, so it's a flattened circle seen at an angle
+    vec2 flat2 = mat2(0.95, 0.31, -0.31, 0.95) * v;
+    vec2 tilted = vec2(flat2.x, flat2.y * 3.4);
+    float diskRadius = length(tilted) + 0.001;
+
+    // Gas near the center orbits faster, which pulls the threads into long streaks
+    float twist = 2.2 * log(diskRadius) - t * 22.0 / (diskRadius * 6.0 + 1.0);
+    float c = cos(twist);
+    float s = sin(twist);
+    vec2 swirled = mat2(c, s, -s, c) * tilted;
+    float streaks = 0.25 + pow(threads(swirled * 7.0), 3.0) * 2.2;
+
+    float band = smoothstep(size * 1.05, size * 1.5, diskRadius) * exp(-(diskRadius - size) * 2.7);
+    float heat = exp(-(diskRadius - size) * 6.5);
+    vec3 fire = mix(vec3(0.75, 0.13, 0.03), vec3(1.0, 0.82, 0.48), heat);
+
+    // Gas rushing toward us looks brighter, so one side of the disk blazes
+    float rushing = 1.0 - 0.62 * tilted.x / diskRadius;
+    vec3 disk = fire * band * streaks * rushing * 1.7;
+
+    vec4 scene = vec4(vec3(0.016, 0.006, 0.012), 0.0);
+    scene.rgb += vec3(0.25, 0.05, 0.03) * clouds(p * 1.4 + vec2(t, 1.0));
+
+    // Gravity bends light from the far side of the disk up and around the dark center
+    float arc = exp(-abs(dist - size * 1.38) * 30.0) * smoothstep(-0.06, 0.1, flat2.y);
+    scene.rgb += vec3(1.0, 0.62, 0.28) * arc * (0.5 + streaks * 0.3);
+
+    // The dark center, then the near part of the disk passing in front of it
+    float shadow = 1.0 - smoothstep(size - 0.003, size + 0.003, dist);
+    scene.rgb += disk * max(1.0 - shadow, (1.0 - smoothstep(-0.012, 0.012, flat2.y)));
+    vec3 shadowColor = disk * (1.0 - smoothstep(-0.012, 0.012, flat2.y));
+    scene = layerOver(scene, shadowColor, shadow);
+
+    // A razor-thin ring of light right at the edge
+    scene.rgb += vec3(1.0, 0.86, 0.66) * exp(-abs(dist - size) * 150.0) * 1.1;
+
+    return scene;
+  }
+
+  // Work out one scene. A bigger zoom means the camera is closer.
+  vec4 drawScene(int scene, vec2 screen, float zoom) {
+    screen = 0.5 + (screen - 0.5) / zoom;
+    float aspect = uResolution.x / uResolution.y;
+    vec2 p = screen * vec2(aspect, 1.0) * 1.6;
+    float t = uTime * 0.025;
+
+    if (scene == 0) {
+      return earthScene(screen, aspect, t);
+    }
+    if (scene == 1) {
+      return alienScene(screen, aspect, t);
+    }
+    if (scene == 2) {
+      return vec4(nebulaScene(screen, p, t), 0.0);
+    }
+    if (scene == 3) {
+      return blackHoleScene(screen, p, aspect, t);
+    }
+    return vec4(galaxyScene(screen, p, aspect, t), 0.0);
+  }
+
+  void main() {
+    vec2 screen = gl_FragCoord.xy / uResolution;
+    vec4 color;
+
+    if (uBlend <= 0.0) {
+      color = drawScene(uSceneA, screen, 1.0);
+    } else {
+      // The camera flies into the old scene while the new one rushes up from far away
+      float leaving = 1.0 + uBlend * uBlend * 2.2;
+      float arriving = 0.45 + 0.55 * (1.0 - (1.0 - uBlend) * (1.0 - uBlend));
+
+      // The new scene opens up from the center, with ragged cloud-shaped edges
+      float aspect = uResolution.x / uResolution.y;
+      vec2 centered = (screen - 0.5) * vec2(aspect, 1.0);
+      float field = length(centered) * 0.55 + clouds(centered * 3.0 + vec2(uTime * 0.05, 2.0)) * 0.6;
+      float edge = uBlend * 1.6 - 0.3;
+      float mixAmount = 1.0 - smoothstep(edge - 0.2, edge + 0.2, field);
+
+      color = mix(drawScene(uSceneA, screen, leaving), drawScene(uSceneB, screen, arriving), mixAmount);
+
+      // A soft glow along the edges, and a blue flash from the center at the peak of the jump
+      float jump = 4.0 * uBlend * (1.0 - uBlend);
+      color.rgb += vec3(0.35, 0.45, 0.85) * mixAmount * (1.0 - mixAmount) * 0.3;
+      color.rgb += vec3(0.5, 0.65, 1.0) * jump * jump * exp(-length(centered) * 3.2) * 0.4;
+    }
+
+    gl_FragColor = color;
   }
 `;
 
@@ -537,10 +782,18 @@ const COVER_SCREEN_SHADER = `
 `;
 
 const NEBULA_FRAME_MS = 33; // Redraw the slow-moving nebula about 30 times a second
+const SCENE_HOLD_MS = 16000; // How long the journey stays at each stop
+const SCENE_CHANGE_MS = 7000; // How long each warp jump takes
+
+// The stops on the journey, in order, heading farther and farther from home.
+// The numbers match the scene numbers in the shader's drawScene function.
+const JOURNEY = ['Earth', 'An alien world', 'A glowing nebula', 'A black hole', 'A spiral galaxy'];
+
 const SLOW_FRAME_MS = 50;
 const SLOW_FRAME_LIMIT = 40;
 
 const nebulaCanvas = document.getElementById('nebulaCanvas');
+const sceneCaption = document.getElementById('sceneCaption');
 let nebula = null;
 
 // Draw the nebula at lower resolution than the screen, since this is the demanding part
@@ -551,7 +804,7 @@ let slowFrames = 0;
 // Set up the graphics card. Returns null on browsers that can't do this,
 // which leaves the plain .nebula background showing instead.
 function setupNebula() {
-  const gl = nebulaCanvas.getContext('webgl', { alpha: false, antialias: false });
+  const gl = nebulaCanvas.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false });
   if (!gl) {
     nebulaCanvas.hidden = true;
     return null;
@@ -572,6 +825,9 @@ function setupNebula() {
   }
   gl.useProgram(program);
 
+  // The animated scenes work here, so the plain fallback background isn't needed
+  document.querySelector('.nebula').hidden = true;
+
   // Two triangles that together cover the whole canvas
   gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
@@ -582,7 +838,10 @@ function setupNebula() {
   return {
     gl,
     resolution: gl.getUniformLocation(program, 'uResolution'),
-    time: gl.getUniformLocation(program, 'uTime')
+    time: gl.getUniformLocation(program, 'uTime'),
+    blend: gl.getUniformLocation(program, 'uBlend'),
+    sceneA: gl.getUniformLocation(program, 'uSceneA'),
+    sceneB: gl.getUniformLocation(program, 'uSceneB')
   };
 }
 
@@ -596,10 +855,40 @@ function sizeNebula() {
   }
 }
 
+// Work out where the journey is at this moment.
+// The timeline repeats: stay at a stop, jump to the next one, stay there, and so on.
+function getJourney(time) {
+  const legTime = SCENE_HOLD_MS + SCENE_CHANGE_MS;
+  const leg = Math.floor(time / legTime);
+  const progress = Math.max((time % legTime - SCENE_HOLD_MS) / SCENE_CHANGE_MS, 0);
+
+  return {
+    from: leg % JOURNEY.length,
+    to: (leg + 1) % JOURNEY.length,
+    // Ease in and out so the jump starts and ends gently
+    blend: progress * progress * (3 - 2 * progress),
+    // How fast we're moving: 0 when stopped, and 1 halfway through a jump
+    warp: Math.sin(progress * Math.PI)
+  };
+}
+
 function drawNebula(time) {
   if (nebula) {
+    const journey = getJourney(time);
     nebula.gl.uniform1f(nebula.time, time / 1000);
+    nebula.gl.uniform1f(nebula.blend, journey.blend);
+    nebula.gl.uniform1i(nebula.sceneA, journey.from);
+    nebula.gl.uniform1i(nebula.sceneB, journey.to);
     nebula.gl.drawArrays(nebula.gl.TRIANGLES, 0, 6);
+  }
+}
+
+// Say where we are, fading the label out during each jump
+function updateCaption(journey) {
+  const changing = journey.blend > 0;
+  sceneCaption.classList.toggle('changing', changing);
+  if (!changing) {
+    sceneCaption.textContent = JOURNEY[journey.from];
   }
 }
 
@@ -682,14 +971,28 @@ function setupStars() {
   }
 }
 
-// Draw every small star, gently changing its brightness over time so it twinkles
-function drawStars(time) {
+// Draw every small star, gently changing its brightness over time so it twinkles.
+// During a warp jump, each star stretches into a streak pointing away from the center.
+function drawStars(time, warp) {
+  const centerX = starWidth / 2;
+  const centerY = starHeight / 2;
+
   stars.forEach((star) => {
     const brightness = 0.7 + 0.3 * Math.sin(time * star.twinkleSpeed + star.twinkleOffset);
-    starContext.fillStyle = `rgba(${star.color}, ${brightness})`;
-    starContext.beginPath();
-    starContext.arc(star.x, star.y, star.size, 0, Math.PI * 2);
-    starContext.fill();
+
+    if (warp > 0.02) {
+      starContext.strokeStyle = `rgba(${star.color}, ${brightness})`;
+      starContext.lineWidth = star.size;
+      starContext.beginPath();
+      starContext.moveTo(star.x, star.y);
+      starContext.lineTo(star.x + (star.x - centerX) * warp * 0.16, star.y + (star.y - centerY) * warp * 0.16);
+      starContext.stroke();
+    } else {
+      starContext.fillStyle = `rgba(${star.color}, ${brightness})`;
+      starContext.beginPath();
+      starContext.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+      starContext.fill();
+    }
   });
 }
 
@@ -706,10 +1009,11 @@ function drawFlareBeam(star, endX, endY, brightness) {
 }
 
 // Draw the big stars: a soft glow, a bright center, and a slowly pulsing cross of light
-function drawFlareStars(time) {
+function drawFlareStars(time, warp) {
   starContext.lineWidth = 1;
   flareStars.forEach((star) => {
-    const pulse = 0.8 + 0.2 * Math.sin(time * star.twinkleSpeed + star.twinkleOffset);
+    // Fade the big stars away during a warp jump
+    const pulse = (0.8 + 0.2 * Math.sin(time * star.twinkleSpeed + star.twinkleOffset)) * (1 - warp);
     const length = star.size * 1.6 * pulse;
 
     const glow = starContext.createRadialGradient(star.x, star.y, 0, star.x, star.y, star.size * 0.7);
@@ -729,13 +1033,26 @@ function drawFlareStars(time) {
   });
 }
 
-// Move the stars slowly down the screen, wrapping back to the top at the bottom
-function moveStars(list, seconds) {
+// Move the stars slowly down the screen, wrapping back to the top at the bottom.
+// During a warp jump, they also rush outward from the center, as if we're flying past them.
+function moveStars(list, seconds, warp) {
+  const centerX = starWidth / 2;
+  const centerY = starHeight / 2;
+
   list.forEach((star) => {
     star.y += star.speed * seconds;
-    if (star.y > starHeight) {
-      star.y = 0;
-      star.x = Math.random() * starWidth;
+    star.x += (star.x - centerX) * warp * 1.3 * seconds;
+    star.y += (star.y - centerY) * warp * 1.3 * seconds;
+
+    if (star.y > starHeight || star.y < 0 || star.x > starWidth || star.x < 0) {
+      if (warp > 0.02) {
+        // Bring new stars in from around the center while we're flying
+        star.x = centerX + randomBetween(-0.3, 0.3) * starWidth;
+        star.y = centerY + randomBetween(-0.3, 0.3) * starHeight;
+      } else {
+        star.y = 0;
+        star.x = Math.random() * starWidth;
+      }
     }
   });
 }
@@ -806,11 +1123,14 @@ function animateBackground(time) {
     lastNebulaTime = time;
   }
 
+  const journey = getJourney(time);
+  updateCaption(journey);
+
   starContext.clearRect(0, 0, starWidth, starHeight);
-  moveStars(stars, seconds);
-  moveStars(flareStars, seconds);
-  drawStars(time);
-  drawFlareStars(time);
+  moveStars(stars, seconds, journey.warp);
+  moveStars(flareStars, seconds, journey.warp);
+  drawStars(time, journey.warp);
+  drawFlareStars(time, journey.warp);
 
   if (!shootingStar && time > nextShootingStarTime) {
     launchShootingStar();
@@ -826,8 +1146,9 @@ function animateBackground(time) {
 // Draw a single still picture, for people who've asked their device to reduce motion
 function drawStillBackground() {
   drawNebula(0);
-  drawStars(0);
-  drawFlareStars(0);
+  drawStars(0, 0);
+  drawFlareStars(0, 0);
+  updateCaption(getJourney(0));
 }
 
 nebula = setupNebula();
@@ -851,3 +1172,201 @@ window.addEventListener('resize', () => {
     }
   }
 });
+
+// ----- The Big Bang -----
+
+const bigBangCanvas = document.getElementById('bigBangCanvas');
+const bigBangContext = bigBangCanvas.getContext('2d');
+
+// The timeline, in milliseconds from when it starts
+const BANG_TIME = 1100; // Everything collapses to a point until now, then it explodes
+const CARDS_TIME = 1900; // The photos start flying out of the blast
+const UNIVERSE_SHOWN_TIME = 3000; // By now the darkness has cleared to show the universe
+const BIG_BANG_END_TIME = 4100;
+
+// The debris colors: white-hot, gold, and the crimson and cyan of the nebula
+const DEBRIS_COLORS = ['255, 255, 255', '255, 214, 140', '255, 140, 60', '255, 60, 110', '90, 200, 255', '150, 130, 255'];
+
+let debris = [];
+let bangWidth = 0;
+let bangHeight = 0;
+
+// Size the canvas and create the debris, each piece with its own direction and speed
+function setupBigBang() {
+  bangWidth = window.innerWidth;
+  bangHeight = window.innerHeight;
+  bigBangCanvas.width = bangWidth;
+  bigBangCanvas.height = bangHeight;
+
+  const farthest = Math.hypot(bangWidth, bangHeight) / 2;
+  const pieceCount = Math.min(1400, Math.round((bangWidth * bangHeight) / 700));
+  debris = [];
+  for (let i = 0; i < pieceCount; i++) {
+    debris.push({
+      angle: Math.random() * Math.PI * 2,
+      // Most pieces are slow, and a few are very fast
+      speed: farthest * (0.03 + 2.4 * Math.pow(Math.random(), 2.2)),
+      startDistance: farthest * randomBetween(0.5, 1.3),
+      size: randomBetween(0.6, 2.2),
+      color: randomItem(DEBRIS_COLORS)
+    });
+  }
+}
+
+// Part 1: everything rushes inward while the screen goes dark and a tiny point glows brighter
+function drawCollapse(time) {
+  const progress = time / BANG_TIME;
+  const centerX = bangWidth / 2;
+  const centerY = bangHeight / 2;
+
+  bigBangContext.fillStyle = `rgba(0, 0, 0, ${Math.min(progress * 1.6, 1)})`;
+  bigBangContext.fillRect(0, 0, bangWidth, bangHeight);
+
+  // Slow at first and fastest right at the end
+  const pull = progress * progress * progress;
+  bigBangContext.globalCompositeOperation = 'lighter';
+  debris.forEach((piece) => {
+    const distance = piece.startDistance * (1 - pull);
+    const tail = distance + piece.startDistance * pull * 0.12 + 2;
+    bigBangContext.strokeStyle = `rgba(${piece.color}, ${0.25 + progress * 0.6})`;
+    bigBangContext.lineWidth = piece.size * 0.7;
+    bigBangContext.beginPath();
+    bigBangContext.moveTo(centerX + Math.cos(piece.angle) * distance, centerY + Math.sin(piece.angle) * distance);
+    bigBangContext.lineTo(centerX + Math.cos(piece.angle) * tail, centerY + Math.sin(piece.angle) * tail);
+    bigBangContext.stroke();
+  });
+
+  // The point of light, shaking faster as it gets ready to burst
+  const radius = 4 + 34 * pull + Math.sin(time * 0.05) * 3 * progress;
+  const point = bigBangContext.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
+  point.addColorStop(0, 'rgba(255, 255, 255, 1)');
+  point.addColorStop(0.3, 'rgba(255, 225, 170, 0.9)');
+  point.addColorStop(1, 'rgba(255, 150, 80, 0)');
+  bigBangContext.fillStyle = point;
+  bigBangContext.beginPath();
+  bigBangContext.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  bigBangContext.fill();
+}
+
+// Draw one soft, glowing ring of the shockwave, fading as it spreads
+function drawShockwave(sinceBang, delay, color) {
+  const age = sinceBang - delay;
+  if (age < 0) {
+    return;
+  }
+  const farthest = Math.hypot(bangWidth, bangHeight) / 2;
+  const strength = Math.exp(-age / 600);
+  const radius = farthest * 1.6 * (1 - strength);
+  const thickness = 18 + farthest * 0.16 * (1 - strength);
+  const inner = Math.max(radius - thickness, 0);
+  const outer = radius + thickness;
+
+  const ring = bigBangContext.createRadialGradient(bangWidth / 2, bangHeight / 2, inner, bangWidth / 2, bangHeight / 2, outer);
+  ring.addColorStop(0, `rgba(${color}, 0)`);
+  ring.addColorStop(0.72, `rgba(${color}, ${strength * 0.75})`);
+  ring.addColorStop(0.8, `rgba(255, 255, 255, ${strength})`);
+  ring.addColorStop(1, `rgba(${color}, 0)`);
+  bigBangContext.fillStyle = ring;
+  bigBangContext.fillRect(0, 0, bangWidth, bangHeight);
+}
+
+// Part 2: the explosion, with debris flying out as the darkness clears to reveal the universe
+function drawExplosion(time) {
+  const sinceBang = time - BANG_TIME;
+  const seconds = sinceBang / 1000;
+  const centerX = bangWidth / 2;
+  const centerY = bangHeight / 2;
+  const farthest = Math.hypot(bangWidth, bangHeight) / 2;
+
+  const darkness = 1 - Math.min(Math.max((time - BANG_TIME - 200) / (UNIVERSE_SHOWN_TIME - BANG_TIME - 200), 0), 1);
+  bigBangContext.fillStyle = `rgba(0, 0, 0, ${darkness})`;
+  bigBangContext.fillRect(0, 0, bangWidth, bangHeight);
+
+  bigBangContext.globalCompositeOperation = 'lighter';
+
+  // The fireball grows and fades
+  const fireballStrength = Math.exp(-sinceBang / 750);
+  const fireballRadius = farthest * (0.15 + 0.95 * (1 - Math.exp(-sinceBang / 400)));
+  const fireball = bigBangContext.createRadialGradient(centerX, centerY, 0, centerX, centerY, fireballRadius);
+  fireball.addColorStop(0, `rgba(255, 255, 255, ${fireballStrength})`);
+  fireball.addColorStop(0.2, `rgba(255, 205, 130, ${fireballStrength})`);
+  fireball.addColorStop(0.5, `rgba(255, 80, 60, ${fireballStrength * 0.6})`);
+  fireball.addColorStop(0.75, `rgba(120, 50, 200, ${fireballStrength * 0.3})`);
+  fireball.addColorStop(1, 'rgba(90, 40, 200, 0)');
+  bigBangContext.fillStyle = fireball;
+  bigBangContext.fillRect(0, 0, bangWidth, bangHeight);
+
+  drawShockwave(sinceBang, 0, '255, 220, 170');
+  drawShockwave(sinceBang, 180, '110, 190, 255');
+
+  // Debris shoots out fast, slows down, and fades, leaving streaks behind it
+  const pieceFade = Math.max(1 - sinceBang / (BIG_BANG_END_TIME - BANG_TIME), 0);
+  const slowing = 1 - Math.exp(-seconds * 2.2);
+  const streak = Math.exp(-seconds * 2.2) * 0.14;
+  debris.forEach((piece) => {
+    const distance = piece.speed * slowing;
+    const tail = Math.max(distance - piece.speed * streak, 0);
+    bigBangContext.strokeStyle = `rgba(${piece.color}, ${pieceFade})`;
+    bigBangContext.lineWidth = piece.size;
+    bigBangContext.beginPath();
+    bigBangContext.moveTo(centerX + Math.cos(piece.angle) * distance, centerY + Math.sin(piece.angle) * distance);
+    bigBangContext.lineTo(centerX + Math.cos(piece.angle) * (tail - 1), centerY + Math.sin(piece.angle) * (tail - 1));
+    bigBangContext.stroke();
+  });
+
+  // The blinding flash of the bang itself, over the top of everything
+  const flash = Math.exp(-sinceBang / 80);
+  bigBangContext.globalCompositeOperation = 'source-over';
+  bigBangContext.fillStyle = `rgba(255, 244, 222, ${flash})`;
+  bigBangContext.fillRect(0, 0, bangWidth, bangHeight);
+}
+
+// Draw the Big Bang as it looks at a certain moment
+function drawBigBang(time) {
+  bigBangContext.globalCompositeOperation = 'source-over';
+  bigBangContext.clearRect(0, 0, bangWidth, bangHeight);
+  if (time < BANG_TIME) {
+    drawCollapse(time);
+  } else {
+    drawExplosion(time);
+  }
+}
+
+// Play the Big Bang. The promise it returns finishes when it's time for the photos to appear,
+// while the rest of the explosion carries on behind them.
+function playBigBang() {
+  setupBigBang();
+  bigBangCanvas.hidden = false;
+  const startTime = performance.now();
+
+  function nextFrame(now) {
+    const time = now - startTime;
+    if (time >= BIG_BANG_END_TIME) {
+      bigBangCanvas.hidden = true;
+      return;
+    }
+    drawBigBang(Math.max(time, 0));
+    requestAnimationFrame(nextFrame);
+  }
+  requestAnimationFrame(nextFrame);
+
+  return new Promise((resolve) => {
+    setTimeout(resolve, CARDS_TIME);
+  });
+}
+
+// Send each new card flying from the center of the window into its place
+function launchCardsFromCenter() {
+  gallery.querySelectorAll('.gallery-item').forEach((card, index) => {
+    const box = card.getBoundingClientRect();
+    card.style.setProperty('--from-x', `${window.innerWidth / 2 - (box.left + box.width / 2)}px`);
+    card.style.setProperty('--from-y', `${window.innerHeight / 2 - (box.top + box.height / 2)}px`);
+    card.style.setProperty('--birth-delay', `${index * 110}ms`);
+    card.classList.add('born');
+
+    // Clean up afterward, so the card behaves normally from then on
+    card.addEventListener('animationend', () => {
+      card.classList.remove('born');
+    }, { once: true });
+  });
+}

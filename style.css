@@ -40,6 +40,10 @@ body:has(.modal[open]) {
   overflow: hidden;
 }
 
+.space-bg canvas {
+  pointer-events: none;
+}
+
 /* A simple version of the nebula for browsers that can't draw the animated one */
 .nebula {
   position: absolute;
@@ -60,6 +64,10 @@ body:has(.modal[open]) {
   }
 }
 
+.nebula[hidden] {
+  display: none;
+}
+
 #nebulaCanvas {
   position: absolute;
   top: 0;
@@ -72,6 +80,24 @@ body:has(.modal[open]) {
   position: absolute;
   top: 0;
   left: 0;
+}
+
+/* Small label saying where the journey is right now */
+.scene-caption {
+  position: absolute;
+  left: 16px;
+  bottom: 14px;
+  padding: 3px 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  background-color: rgba(5, 6, 10, 0.65);
+  border-radius: 4px;
+  transition: opacity 0.8s ease;
+}
+
+.scene-caption.changing {
+  opacity: 0;
 }
 
 /* Centered container */
@@ -469,4 +495,42 @@ input[type="date"] {
 .modal-link a {
   color: #ff8a78;
   font-weight: 600;
+}
+
+/* The Big Bang covers the whole window, but clicks pass straight through it */
+.big-bang {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.big-bang[hidden] {
+  display: none;
+}
+
+/* Cards born from the Big Bang fly from the center of the window into place.
+   script.js sets how far each card travels and when it leaves. */
+.gallery-item.born {
+  animation: card-birth 1s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation-delay: var(--birth-delay);
+}
+
+@keyframes card-birth {
+  from {
+    transform: translate(var(--from-x), var(--from-y)) scale(0.04);
+    opacity: 0;
+    filter: brightness(4);
+  }
+  50% {
+    opacity: 1;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+    filter: none;
+  }
 }
