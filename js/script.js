@@ -178,6 +178,9 @@ const TEXT = {
 
 // Start in the language the person picked before, or else the one their browser uses
 function getStartingLanguage() {
+  if (getGoogleTranslateLanguage()) {
+    return 'en';
+  }
   try {
     const saved = localStorage.getItem('language');
     if (LANGUAGES[saved]) {
@@ -189,6 +192,16 @@ function getStartingLanguage() {
   const browserLanguage = (navigator.language || 'en').slice(0, 2);
   return LANGUAGES[browserLanguage] ? browserLanguage : 'en';
 }
+
+// Which language Google Translate is translating into, if it's turned on.
+// Google remembers this in a cookie that looks like "googtrans=/en/ja".
+function getGoogleTranslateLanguage() {
+  const match = document.cookie.match(/googtrans=\/[^/;]+\/([^;]+)/);
+  return match && match[1] !== 'en' ? match[1] : null;
+}
+
+// True while Google Translate or the browser's own translator has translated the page
+let isMachineTranslated = false;
 
 let currentLanguage = getStartingLanguage();
 
@@ -452,6 +465,14 @@ function showFact(fact) {
   spaceFact.dataset.category = fact.category;
 
   const [text, highlight] = fact[currentLanguage];
+
+  // Translators work sentence by sentence, so splitting the fact into words would give
+  // a word-by-word mess. While the page is being translated, show the fact as plain text.
+  if (isMachineTranslated) {
+    factText.textContent = text;
+    return;
+  }
+
   const highlightStart = text.indexOf(highlight);
   const before = text.slice(0, highlightStart);
   const after = text.slice(highlightStart + highlight.length);
@@ -1974,11 +1995,94 @@ function applyLanguage(language) {
   }
 }
 
+// ----- More languages, through Google Translate -----
+
+const translatePanel = document.getElementById('translatePanel');
+let isGoogleTranslateLoaded = false;
+
+// Load Google's translator the first time someone asks for it, so it never slows down the page otherwise
+function loadGoogleTranslate() {
+  translatePanel.hidden = false;
+  if (isGoogleTranslateLoaded) {
+    return;
+  }
+  isGoogleTranslateLoaded = true;
+
+  // Google calls this function once its code has loaded
+  window.startGoogleTranslate = () => {
+    new google.translate.TranslateElement({ pageLanguage: 'en', autoDisplay: false }, 'googleTranslate');
+  };
+  const script = document.createElement('script');
+  script.src = 'https://translate.google.com/translate_a/element.js?cb=startGoogleTranslate';
+  document.head.appendChild(script);
+}
+
+// Turn Google Translate off: forget its cookie, then reload the page in the chosen language
+function stopGoogleTranslate(language) {
+  try {
+    localStorage.setItem('language', language);
+  } catch (error) {
+    // Saved settings aren't available, so the page will reload in English
+  }
+  const expired = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+  document.cookie = expired;
+  document.cookie = `${expired}; domain=${location.hostname}`;
+  document.cookie = `${expired}; domain=.${location.hostname}`;
+  location.reload();
+}
+
+// Google Translate and browsers' own translators mark the page with a class saying which way
+// the new language reads. Follow it, so right-to-left languages like Persian or Urdu flip too.
+function followTranslation() {
+  const classes = document.documentElement.classList;
+  const wasTranslated = isMachineTranslated;
+  isMachineTranslated = classes.contains('translated-rtl') || classes.contains('translated-ltr');
+
+  let direction = LANGUAGES[currentLanguage].dir;
+  if (classes.contains('translated-rtl')) {
+    direction = 'rtl';
+  } else if (classes.contains('translated-ltr')) {
+    direction = 'ltr';
+  }
+  if (document.documentElement.dir !== direction) {
+    document.documentElement.dir = direction;
+  }
+
+  // Switch the fact box between plain text and the word-by-word animation
+  if (isMachineTranslated !== wasTranslated) {
+    showFact(factOrder[factIndex]);
+  }
+}
+
+new MutationObserver(followTranslation).observe(document.documentElement, {
+  attributes: true,
+  attributeFilter: ['class']
+});
+
 languageSelect.addEventListener('change', () => {
-  applyLanguage(languageSelect.value);
+  const choice = languageSelect.value;
+
+  if (choice === 'more') {
+    // Google translates from English, so show the English page first
+    if (currentLanguage !== 'en') {
+      applyLanguage('en');
+    }
+    languageSelect.value = 'more';
+    loadGoogleTranslate();
+  } else if (getGoogleTranslateLanguage() || isGoogleTranslateLoaded) {
+    stopGoogleTranslate(choice);
+  } else {
+    applyLanguage(choice);
+  }
 });
 
 applyLanguage(currentLanguage);
+
+// If Google Translate was on last time, bring it back once the page has loaded
+if (getGoogleTranslateLanguage()) {
+  languageSelect.value = 'more';
+  window.addEventListener('load', loadGoogleTranslate);
+}
 
 // Measure the fact box again whenever the window width changes
 let lastFactWidth = window.innerWidth;

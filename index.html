@@ -27,13 +27,22 @@
     <!-- Language picker. Arabic and Hebrew switch the page to read right-to-left. -->
     <label class="language-picker">
       <span class="visually-hidden" data-i18n="language">Language</span>
-      <select id="languageSelect">
+      <!-- "notranslate" keeps Google Translate from changing the language names -->
+      <select id="languageSelect" class="notranslate" translate="no">
         <option value="en" lang="en">English</option>
         <option value="es" lang="es">Español</option>
         <option value="ar" lang="ar">العربية</option>
         <option value="he" lang="he">עברית</option>
+        <option value="more">🌐 More languages…</option>
       </select>
     </label>
+
+    <!-- Shown after choosing "More languages": Google Translate's list of 200+ languages -->
+    <div id="translatePanel" class="translate-panel" hidden>
+      <p class="translate-title">Choose any language</p>
+      <div id="googleTranslate"></div>
+      <p class="translate-note">Translated automatically by Google, so it may contain mistakes.</p>
+    </div>
   </header>
 
   <div class="container">

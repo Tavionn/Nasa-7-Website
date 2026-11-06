@@ -139,6 +139,73 @@ body:has(.modal[open]) {
   cursor: pointer;
 }
 
+/* On phones, keep the picker narrow enough to stay clear of the logo in the middle */
+@media (max-width: 600px) {
+  .language-picker select {
+    max-width: 30vw;
+  }
+}
+
+/* The Google Translate box, just under the language picker */
+.translate-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  inset-inline-end: 16px;
+  width: min(280px, calc(100vw - 32px));
+  padding: 12px 14px;
+  font-size: 13px;
+  text-align: start;
+  background-color: rgba(12, 14, 21, 0.97);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.translate-title {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.translate-panel select {
+  width: 100%;
+  padding: 6px 8px;
+  font: inherit;
+  color: var(--text);
+  background-color: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color-scheme: dark;
+}
+
+.translate-note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Google Translate adds a bar across the top of the page and pushes everything down.
+   The panel above does the same job, so hide the bar and undo the push.
+   !important is needed because Google sets these styles directly on the elements. */
+body > .skiptranslate,
+iframe.goog-te-banner-frame {
+  display: none !important;
+}
+
+body {
+  top: 0 !important;
+}
+
+/* Turn off the yellow boxes Google draws around translated text on hover */
+#goog-gt-tt,
+.goog-te-balloon-frame {
+  display: none !important;
+}
+
+.goog-text-highlight {
+  background: none !important;
+  box-shadow: none !important;
+}
+
 /* Hidden on screen, but still read out by screen readers */
 .visually-hidden {
   position: absolute;
@@ -164,13 +231,20 @@ body:has(.modal[open]) {
   text-align: left;
 }
 
-/* Spacing letters apart breaks up Arabic writing, which joins its letters together */
+/* Spacing letters apart breaks up writing that joins its letters together, like Arabic.
+   This also covers languages Google Translate reads right-to-left, like Persian and Urdu. */
 html[lang="ar"] .tag,
 html[lang="ar"] .space-fact h2,
 html[lang="ar"] .card-label,
 html[lang="ar"] .date,
 html[lang="ar"] .loader-subtext,
-html[lang="ar"] .field label {
+html[lang="ar"] .field label,
+html.translated-rtl .tag,
+html.translated-rtl .space-fact h2,
+html.translated-rtl .card-label,
+html.translated-rtl .date,
+html.translated-rtl .loader-subtext,
+html.translated-rtl .field label {
   letter-spacing: 0;
 }
 
