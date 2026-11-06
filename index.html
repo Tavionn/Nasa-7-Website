@@ -101,7 +101,8 @@
   <!-- The Big Bang plays on this canvas, on top of the page, the first time images load -->
   <canvas id="bigBangCanvas" class="big-bang" aria-hidden="true" hidden></canvas>
 
-  <script src="js/dateRange.js"></script>
-  <script src="js/script.js"></script>
+  <!-- "defer" lets the page show first, then runs these in order -->
+  <script src="js/dateRange.js" defer></script>
+  <script src="js/script.js" defer></script>
 </body>
 </html>
