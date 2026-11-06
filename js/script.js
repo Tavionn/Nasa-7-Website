@@ -39,6 +39,8 @@ const TEXT = {
     startDate: 'Start date',
     endDate: 'End date',
     getImages: 'Get Space Images',
+    tooEarly: 'Astronomy Picture of the Day began on June 16, 1995, so that\'s the earliest date.',
+    tooLate: 'There are no pictures from the future yet, so today is the latest date.',
     placeholder: 'Select a date range and click "Get Space Images" to explore the cosmos!',
     loading: 'Loading space photos…',
     loadingSub: 'Retrieving pictures from NASA',
@@ -75,6 +77,8 @@ const TEXT = {
     startDate: 'Fecha de inicio',
     endDate: 'Fecha de fin',
     getImages: 'Ver imágenes del espacio',
+    tooEarly: 'La Imagen astronómica del día empezó el 16 de junio de 1995, así que esa es la fecha más temprana.',
+    tooLate: 'Todavía no hay imágenes del futuro, así que hoy es la fecha más reciente.',
     placeholder: 'Elige un rango de fechas y haz clic en «Ver imágenes del espacio» para explorar el cosmos.',
     loading: 'Cargando fotos del espacio…',
     loadingSub: 'Obteniendo imágenes de la NASA',
@@ -111,6 +115,8 @@ const TEXT = {
     startDate: 'تاريخ البداية',
     endDate: 'تاريخ النهاية',
     getImages: 'اعرض صور الفضاء',
+    tooEarly: 'بدأت الصورة الفلكية لليوم في 16 يونيو 1995، لذا هذا أقدم تاريخ متاح.',
+    tooLate: 'لا توجد صور من المستقبل بعد، لذا اليوم هو آخر تاريخ متاح.',
     placeholder: 'اختر نطاقًا من التواريخ واضغط «اعرض صور الفضاء» لاستكشاف الكون!',
     loading: 'جارٍ تحميل صور الفضاء…',
     loadingSub: 'جارٍ جلب الصور من ناسا',
@@ -147,6 +153,8 @@ const TEXT = {
     startDate: 'תאריך התחלה',
     endDate: 'תאריך סיום',
     getImages: 'הצג תמונות חלל',
+    tooEarly: 'התמונה האסטרונומית היומית התחילה ב־16 ביוני 1995, ולכן זה התאריך המוקדם ביותר.',
+    tooLate: 'עדיין אין תמונות מהעתיד, ולכן היום הוא התאריך המאוחר ביותר.',
     placeholder: 'בחרו טווח תאריכים ולחצו על „הצג תמונות חלל” כדי לחקור את היקום!',
     loading: 'טוענים תמונות חלל…',
     loadingSub: 'מביאים תמונות מנאס״א',
@@ -431,6 +439,54 @@ let hasBigBangPlayed = false;
 // - Default to a range of 9 days (from 9 days ago to today)
 // - Restrict dates to NASA's image archive (starting from 1995)
 setupDateInputs(startInput, endInput);
+
+// Some phones (iPhones especially) let people scroll to dates outside the limits set
+// in dateRange.js. So after any change, move a date back inside the range and say why.
+const dateNote = document.getElementById('dateNote');
+let dateNoteKey = '';
+
+function showDateNote(key) {
+  dateNoteKey = key;
+  dateNote.textContent = key ? t(key) : '';
+}
+
+// Move a date that's too early or too late back to the nearest allowed date
+function keepDateInRange(input) {
+  if (!input.value) {
+    return;
+  }
+  if (input.value < earliestDate) {
+    input.value = earliestDate;
+    showDateNote('tooEarly');
+  } else if (input.value > today) {
+    input.value = today;
+    showDateNote('tooLate');
+  }
+}
+
+// Get the date a number of days after a YYYY-MM-DD date
+function addDays(dateString, days) {
+  const date = new Date(`${dateString}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().split('T')[0];
+}
+
+startInput.addEventListener('change', () => {
+  showDateNote('');
+  keepDateInRange(startInput);
+
+  // dateRange.js sets the end date 8 days after the start. If the start had to be
+  // moved, work out the end date again from the corrected start.
+  if (endInput.value < startInput.value || endInput.value < earliestDate) {
+    const end = addDays(startInput.value, 8);
+    endInput.value = end > today ? today : end;
+  }
+});
+
+endInput.addEventListener('change', () => {
+  showDateNote('');
+  keepDateInRange(endInput);
+});
 
 // Mix up a list so the items come in a random order
 function shuffle(list) {
@@ -851,6 +907,9 @@ function renderGallery(entries, noticeKey) {
 
 // Get the entries and show them in the gallery
 async function loadGallery() {
+  // Make sure both dates are allowed, even if they were typed in
+  keepDateInRange(startInput);
+  keepDateInRange(endInput);
   const startDate = startInput.value;
   const endDate = endInput.value;
 
@@ -2168,6 +2227,7 @@ function applyLanguage(language) {
     element.textContent = t(element.dataset.i18n);
   });
   modalClose.setAttribute('aria-label', t('close'));
+  showDateNote(dateNoteKey);
 
   // Redraw the parts that script.js writes. A new language can need a new font, so
   // measure the fact box again once any fonts it needs have finished loading.
