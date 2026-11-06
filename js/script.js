@@ -487,24 +487,42 @@ function showFact(fact) {
 }
 
 // Make the fact box tall enough for the longest fact in this language at this screen size,
-// so the page below doesn't jump up and down as the facts change
+// so the page below doesn't jump up and down as the facts change.
+// Each fact is tried as plain text with a bold highlight. That takes up the same room as the
+// animated version, but is much quicker for the browser to measure.
 function reserveFactHeight() {
   spaceFact.style.minHeight = '';
   let tallest = 0;
   spaceFacts.forEach((fact) => {
-    showFact(fact);
+    const [text, highlight] = fact[currentLanguage];
+    const highlightStart = text.indexOf(highlight);
+    factHeading.textContent = t(fact.category);
+    factText.innerHTML = isMachineTranslated
+      ? escapeHtml(text)
+      : `${escapeHtml(text.slice(0, highlightStart))}<b>${escapeHtml(highlight)}</b>${escapeHtml(text.slice(highlightStart + highlight.length))}`;
     tallest = Math.max(tallest, spaceFact.offsetHeight);
   });
   spaceFact.style.minHeight = `${tallest}px`;
   showFact(factOrder[factIndex]);
 }
 
-// Measuring takes a moment, so do it when the browser isn't busy showing the page
+// Measuring takes a moment, so do it when the browser isn't busy showing the page,
+// and only once even if several things ask for it at the same time
+let isFactMeasureWaiting = false;
+
 function reserveFactHeightSoon() {
+  if (isFactMeasureWaiting) {
+    return;
+  }
+  isFactMeasureWaiting = true;
+  const measure = () => {
+    isFactMeasureWaiting = false;
+    reserveFactHeight();
+  };
   if (window.requestIdleCallback) {
-    requestIdleCallback(reserveFactHeight, { timeout: 2000 });
+    requestIdleCallback(measure, { timeout: 2000 });
   } else {
-    setTimeout(reserveFactHeight, 500);
+    setTimeout(measure, 500);
   }
 }
 
@@ -1389,8 +1407,158 @@ function checkNebula() {
   }, 1300);
 }
 
+// --- Drawing the scenes on a separate thread ---
+// Setting up the graphics card and drawing the scenes takes real work. Where the browser
+// allows it, a Web Worker (a separate thread) does that work, so the page itself never
+// has to wait for it. The page just tells the worker where the journey is, every frame.
+
+// This function is the worker's code. It runs on its own thread, so it can't see anything
+// else in this file. It gets everything it needs through messages instead.
+function sceneWorkerCode() {
+  let gl = null;
+  let locations = null;
+
+  function start(message) {
+    gl = message.canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false });
+    if (!gl) {
+      self.postMessage({ type: 'failed' });
+      return;
+    }
+
+    // Without a real graphics card, the scenes are far too slow, so don't use them
+    const info = gl.getExtension('WEBGL_debug_renderer_info');
+    const renderer = info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    if (/swiftshader|llvmpipe|softpipe|software|basic render/i.test(renderer)) {
+      self.postMessage({ type: 'failed' });
+      return;
+    }
+
+    // Ask the graphics card to build the program in the background. Building it in one go
+    // would tie up the graphics card, which the page also needs for drawing everything else.
+    const backgroundBuild = gl.getExtension('KHR_parallel_shader_compile');
+
+    const program = gl.createProgram();
+    [[gl.VERTEX_SHADER, message.vertexShader], [gl.FRAGMENT_SHADER, message.fragmentShader]].forEach(([type, source]) => {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      gl.attachShader(program, shader);
+    });
+    gl.linkProgram(program);
+
+    // Check back every tenth of a second until the program is built
+    function finishWhenBuilt() {
+      if (backgroundBuild && !gl.getProgramParameter(program, backgroundBuild.COMPLETION_STATUS_KHR)) {
+        setTimeout(finishWhenBuilt, 100);
+        return;
+      }
+      finish(program, message);
+    }
+    finishWhenBuilt();
+  }
+
+  function finish(program, message) {
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      self.postMessage({ type: 'failed' });
+      return;
+    }
+    gl.useProgram(program);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+    const position = gl.getAttribLocation(program, 'position');
+    gl.enableVertexAttribArray(position);
+    gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+
+    locations = {
+      resolution: gl.getUniformLocation(program, 'uResolution'),
+      time: gl.getUniformLocation(program, 'uTime'),
+      blend: gl.getUniformLocation(program, 'uBlend'),
+      sceneA: gl.getUniformLocation(program, 'uSceneA'),
+      sceneB: gl.getUniformLocation(program, 'uSceneB')
+    };
+    resize(message);
+    self.postMessage({ type: 'ready' });
+  }
+
+  function resize(message) {
+    gl.canvas.width = message.width;
+    gl.canvas.height = message.height;
+    gl.viewport(0, 0, message.width, message.height);
+    gl.uniform2f(locations.resolution, message.width, message.height);
+  }
+
+  function draw(message) {
+    gl.uniform1f(locations.time, message.time);
+    gl.uniform1f(locations.blend, message.blend);
+    gl.uniform1i(locations.sceneA, message.sceneA);
+    gl.uniform1i(locations.sceneB, message.sceneB);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+
+  self.onmessage = (event) => {
+    const message = event.data;
+    if (message.type === 'start') {
+      start(message);
+    } else if (locations && message.type === 'size') {
+      resize(message);
+    } else if (locations && message.type === 'draw') {
+      draw(message);
+    }
+  };
+}
+
+let sceneWorker = null;
+let isSceneWorkerReady = false;
+
+// Hand the nebula canvas over to a worker. Returns false if this browser can't do that.
+function startSceneWorker() {
+  if (!('transferControlToOffscreen' in nebulaCanvas) || !window.Worker) {
+    return false;
+  }
+
+  // Turn the worker's code into a file the browser can run on another thread
+  const code = new Blob([`(${sceneWorkerCode.toString()})();`], { type: 'text/javascript' });
+  sceneWorker = new Worker(URL.createObjectURL(code));
+
+  sceneWorker.onmessage = (event) => {
+    if (event.data.type === 'ready') {
+      isSceneWorkerReady = true;
+      nebulaCanvas.classList.add('ready');
+      setTimeout(() => {
+        document.querySelector('.nebula').hidden = true;
+      }, 1300);
+      if (prefersReducedMotion) {
+        drawStillBackground();
+      }
+    } else if (event.data.type === 'failed') {
+      // Keep the plain background instead
+      nebulaCanvas.hidden = true;
+    }
+  };
+
+  const canvas = nebulaCanvas.transferControlToOffscreen();
+  sceneWorker.postMessage({
+    type: 'start',
+    canvas,
+    vertexShader: COVER_SCREEN_SHADER,
+    fragmentShader: NEBULA_SHADER,
+    width: Math.round(window.innerWidth * nebulaScale),
+    height: Math.round(window.innerHeight * nebulaScale)
+  }, [canvas]);
+  return true;
+}
+
 // Match the nebula canvas to the window size
 function sizeNebula() {
+  if (sceneWorker) {
+    sceneWorker.postMessage({
+      type: 'size',
+      width: Math.round(window.innerWidth * nebulaScale),
+      height: Math.round(window.innerHeight * nebulaScale)
+    });
+    return;
+  }
   if (nebula) {
     nebulaCanvas.width = Math.round(window.innerWidth * nebulaScale);
     nebulaCanvas.height = Math.round(window.innerHeight * nebulaScale);
@@ -1417,6 +1585,13 @@ function getJourney(time) {
 }
 
 function drawNebula(time) {
+  if (sceneWorker) {
+    if (isSceneWorkerReady) {
+      const journey = getJourney(time);
+      sceneWorker.postMessage({ type: 'draw', time: time / 1000, blend: journey.blend, sceneA: journey.from, sceneB: journey.to });
+    }
+    return;
+  }
   if (nebula) {
     const journey = getJourney(time);
     nebula.gl.uniform1f(nebula.time, time / 1000);
@@ -1716,7 +1891,9 @@ function drawStillBackground() {
 let isBackgroundStarted = false;
 
 function startBackground() {
-  setupNebula();
+  if (!startSceneWorker()) {
+    setupNebula();
+  }
   setupStars();
   isBackgroundStarted = true;
   starCanvas.classList.add('ready');
