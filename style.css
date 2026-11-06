@@ -119,6 +119,61 @@ body:has(.modal[open]) {
   border-bottom: 1px solid var(--line);
 }
 
+/* Language picker, at the end of the header bar */
+.language-picker {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 16px;
+  transform: translateY(-50%);
+}
+
+.language-picker select {
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background-color: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color-scheme: dark;
+  cursor: pointer;
+}
+
+/* Hidden on screen, but still read out by screen readers */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Right-to-left languages: point arrows the other way */
+[dir="rtl"] .link-arrow {
+  transform: scaleX(-1);
+}
+
+/* NASA's titles stay in English, but line up with the rest of the page.
+   Long English paragraphs stay lined up on the left, where they're easiest to read. */
+[dir="rtl"] [lang="en"] {
+  text-align: right;
+}
+
+[dir="rtl"] .explanation[lang="en"] {
+  text-align: left;
+}
+
+/* Spacing letters apart breaks up Arabic writing, which joins its letters together */
+html[lang="ar"] .tag,
+html[lang="ar"] .space-fact h2,
+html[lang="ar"] .card-label,
+html[lang="ar"] .date,
+html[lang="ar"] .loader-subtext,
+html[lang="ar"] .field label {
+  letter-spacing: 0;
+}
+
 /* Logo */
 .logo {
   display: block;
@@ -352,26 +407,26 @@ input[type="date"] {
   animation-play-state: paused;
 }
 
-/* A bright line down the left edge */
+/* A bright line down the starting edge (the left, or the right in right-to-left languages) */
 .space-fact::before {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 0;
+  inset-inline-start: 0;
   width: 4px;
   background: linear-gradient(to bottom, rgb(var(--fact-color)), rgba(var(--fact-color), 0.2));
 }
 
-.space-fact[data-category="NASA Milestone"] {
+.space-fact[data-category="milestone"] {
   --fact-color: 255, 125, 100;
 }
 
-.space-fact[data-category="By the Numbers"] {
+.space-fact[data-category="numbers"] {
   --fact-color: 90, 200, 255;
 }
 
-.space-fact[data-category="Look Up Tonight"] {
+.space-fact[data-category="lookUp"] {
   --fact-color: 190, 160, 255;
 }
 
@@ -577,7 +632,7 @@ input[type="date"] {
   padding: 0;
   font: inherit;
   color: var(--text);
-  text-align: left;
+  text-align: start;
   background-color: var(--card);
   border: 0;
   border-radius: 4px;
@@ -682,7 +737,7 @@ input[type="date"] {
 .card-label {
   position: absolute;
   top: 12px;
-  left: 12px;
+  inset-inline-start: 12px;
   padding: 4px 9px;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -880,10 +935,11 @@ input[type="date"] {
   position: sticky;
   top: 10px;
   z-index: 1;
-  float: right;
+  float: inline-end;
   width: 44px;
   height: 44px;
-  margin: 10px 10px -54px 0;
+  margin-block: 10px -54px;
+  margin-inline: 0 10px;
   font-size: 28px;
   line-height: 1;
   color: var(--text);

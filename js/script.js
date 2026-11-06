@@ -18,36 +18,370 @@ const API_TIMEOUT_MS = 8000;
 // Give up on other requests if there's no answer after 20 seconds
 const REQUEST_TIMEOUT_MS = 20000;
 
-// Everything the fact box can show. Each item has a label, some text, and the part
-// of the text to highlight.
-// It starts with a random "Did You Know?" fact, then rotates through the rest.
+// ----- Languages -----
+
+// The languages the page can show. Arabic and Hebrew are read right-to-left ("rtl").
+const LANGUAGES = {
+  en: { dir: 'ltr', locale: 'en-US' },
+  es: { dir: 'ltr', locale: 'es-ES' },
+  ar: { dir: 'rtl', locale: 'ar-u-nu-latn' },
+  he: { dir: 'rtl', locale: 'he-IL' }
+};
+
+// Every piece of interface text, in every language
+const TEXT = {
+  en: {
+    title: 'NASA Space Explorer',
+    language: 'Language',
+    tag: 'Astronomy Picture of the Day',
+    heading: 'Space Explorer',
+    heroText: 'Pick any dates since 1995 and see what NASA shared from across the cosmos.',
+    startDate: 'Start date',
+    endDate: 'End date',
+    getImages: 'Get Space Images',
+    placeholder: 'Select a date range and click "Get Space Images" to explore the cosmos!',
+    loading: 'Loading space photos…',
+    loadingSub: 'Retrieving pictures from NASA',
+    startAfterEnd: 'The start date needs to be before the end date.',
+    noEntries: 'NASA has no entries for those dates. Please try a different range.',
+    offline: 'We couldn\'t reach NASA. Please check your connection and try again in a few minutes.',
+    longRange: 'That\'s a long date range, so these are the newest {count} entries.',
+    samples: 'NASA\'s image services aren\'t responding right now, so these are sample entries and may not match your dates.',
+    englishNote: '',
+    image: 'Image',
+    video: '▶ Video',
+    interactive: '↗ Interactive',
+    credit: 'Credit:',
+    fullImage: 'View full resolution image',
+    watchYouTube: '▶ Watch on YouTube',
+    watchVideo: '▶ Watch the video',
+    apodPage: 'View this entry on NASA\'s APOD site',
+    close: 'Close',
+    pause: '❚❚ Pause',
+    play: '▶ Play',
+    pauseLabel: 'Pause rotating facts',
+    playLabel: 'Play rotating facts',
+    didYouKnow: 'Did You Know?',
+    milestone: 'NASA Milestone',
+    numbers: 'By the Numbers',
+    lookUp: 'Look Up Tonight'
+  },
+  es: {
+    title: 'Explorador espacial de la NASA',
+    language: 'Idioma',
+    tag: 'Imagen astronómica del día',
+    heading: 'Explorador espacial',
+    heroText: 'Elige cualquier fecha desde 1995 y descubre lo que la NASA compartió desde todo el cosmos.',
+    startDate: 'Fecha de inicio',
+    endDate: 'Fecha de fin',
+    getImages: 'Ver imágenes del espacio',
+    placeholder: 'Elige un rango de fechas y haz clic en «Ver imágenes del espacio» para explorar el cosmos.',
+    loading: 'Cargando fotos del espacio…',
+    loadingSub: 'Obteniendo imágenes de la NASA',
+    startAfterEnd: 'La fecha de inicio debe ser anterior a la fecha de fin.',
+    noEntries: 'La NASA no tiene entradas para esas fechas. Prueba con otro rango.',
+    offline: 'No pudimos conectar con la NASA. Revisa tu conexión y vuelve a intentarlo en unos minutos.',
+    longRange: 'Es un rango de fechas largo, así que estas son las {count} entradas más recientes.',
+    samples: 'Los servicios de imágenes de la NASA no responden ahora mismo, así que estas son entradas de muestra y quizá no coincidan con tus fechas.',
+    englishNote: 'Los títulos y las descripciones vienen de la NASA en inglés.',
+    image: 'Imagen',
+    video: '▶ Vídeo',
+    interactive: '↗ Interactivo',
+    credit: 'Créditos:',
+    fullImage: 'Ver la imagen en resolución completa',
+    watchYouTube: '▶ Ver en YouTube',
+    watchVideo: '▶ Ver el vídeo',
+    apodPage: 'Ver esta entrada en el sitio APOD de la NASA',
+    close: 'Cerrar',
+    pause: '❚❚ Pausa',
+    play: '▶ Reproducir',
+    pauseLabel: 'Pausar los datos que van cambiando',
+    playLabel: 'Reanudar los datos que van cambiando',
+    didYouKnow: '¿Sabías que?',
+    milestone: 'Hito de la NASA',
+    numbers: 'En cifras',
+    lookUp: 'Mira al cielo esta noche'
+  },
+  ar: {
+    title: 'مستكشف الفضاء من ناسا',
+    language: 'اللغة',
+    tag: 'الصورة الفلكية لليوم',
+    heading: 'مستكشف الفضاء',
+    heroText: 'اختر أي تواريخ منذ عام 1995 وشاهد ما شاركته ناسا من أرجاء الكون.',
+    startDate: 'تاريخ البداية',
+    endDate: 'تاريخ النهاية',
+    getImages: 'اعرض صور الفضاء',
+    placeholder: 'اختر نطاقًا من التواريخ واضغط «اعرض صور الفضاء» لاستكشاف الكون!',
+    loading: 'جارٍ تحميل صور الفضاء…',
+    loadingSub: 'جارٍ جلب الصور من ناسا',
+    startAfterEnd: 'يجب أن يكون تاريخ البداية قبل تاريخ النهاية.',
+    noEntries: 'لا توجد لدى ناسا مواد لهذه التواريخ. يُرجى تجربة نطاق آخر.',
+    offline: 'تعذّر الوصول إلى ناسا. يُرجى التحقق من اتصالك والمحاولة مرة أخرى بعد بضع دقائق.',
+    longRange: 'هذا نطاق تواريخ طويل، لذا هذه أحدث {count} مادة.',
+    samples: 'خدمات الصور لدى ناسا لا تستجيب الآن، لذا هذه مواد نموذجية وقد لا تطابق تواريخك.',
+    englishNote: 'العناوين والأوصاف مقدَّمة من ناسا باللغة الإنجليزية.',
+    image: 'صورة',
+    video: '▶ فيديو',
+    interactive: '↗ تفاعلي',
+    credit: 'المصدر:',
+    fullImage: 'عرض الصورة بالدقة الكاملة',
+    watchYouTube: '▶ شاهد على YouTube',
+    watchVideo: '▶ شاهد الفيديو',
+    apodPage: 'اعرض هذه المادة على موقع APOD التابع لناسا',
+    close: 'إغلاق',
+    pause: '❚❚ إيقاف مؤقت',
+    play: '▶ تشغيل',
+    pauseLabel: 'إيقاف تبديل المعلومات مؤقتًا',
+    playLabel: 'تشغيل تبديل المعلومات',
+    didYouKnow: 'هل تعلم؟',
+    milestone: 'إنجاز لناسا',
+    numbers: 'بالأرقام',
+    lookUp: 'انظر إلى السماء الليلة'
+  },
+  he: {
+    title: 'חוקר החלל של נאס״א',
+    language: 'שפה',
+    tag: 'התמונה האסטרונומית היומית',
+    heading: 'חוקר החלל',
+    heroText: 'בחרו כל תאריך מאז 1995 וראו מה נאס״א שיתפה מכל רחבי היקום.',
+    startDate: 'תאריך התחלה',
+    endDate: 'תאריך סיום',
+    getImages: 'הצג תמונות חלל',
+    placeholder: 'בחרו טווח תאריכים ולחצו על „הצג תמונות חלל” כדי לחקור את היקום!',
+    loading: 'טוענים תמונות חלל…',
+    loadingSub: 'מביאים תמונות מנאס״א',
+    startAfterEnd: 'תאריך ההתחלה צריך להיות לפני תאריך הסיום.',
+    noEntries: 'אין לנאס״א פריטים בתאריכים האלה. נסו טווח אחר.',
+    offline: 'לא הצלחנו להתחבר לנאס״א. בדקו את החיבור ונסו שוב בעוד כמה דקות.',
+    longRange: 'זה טווח תאריכים ארוך, ולכן אלה {count} הפריטים החדשים ביותר.',
+    samples: 'שירותי התמונות של נאס״א לא מגיבים כרגע, ולכן אלה פריטים לדוגמה שאולי לא תואמים לתאריכים שבחרתם.',
+    englishNote: 'הכותרות והתיאורים מגיעים מנאס״א באנגלית.',
+    image: 'תמונה',
+    video: '▶ וידאו',
+    interactive: '↗ אינטראקטיבי',
+    credit: 'קרדיט:',
+    fullImage: 'הצגת התמונה ברזולוציה מלאה',
+    watchYouTube: '▶ צפייה ב־YouTube',
+    watchVideo: '▶ צפייה בסרטון',
+    apodPage: 'הצגת הפריט באתר APOD של נאס״א',
+    close: 'סגירה',
+    pause: '❚❚ השהיה',
+    play: '▶ הפעלה',
+    pauseLabel: 'השהיית העובדות המתחלפות',
+    playLabel: 'הפעלת העובדות המתחלפות',
+    didYouKnow: 'הידעת?',
+    milestone: 'אבן דרך של נאס״א',
+    numbers: 'במספרים',
+    lookUp: 'הביטו לשמיים הלילה'
+  }
+};
+
+// Start in the language the person picked before, or else the one their browser uses
+function getStartingLanguage() {
+  try {
+    const saved = localStorage.getItem('language');
+    if (LANGUAGES[saved]) {
+      return saved;
+    }
+  } catch (error) {
+    // Saved settings aren't available, so just use the browser's language
+  }
+  const browserLanguage = (navigator.language || 'en').slice(0, 2);
+  return LANGUAGES[browserLanguage] ? browserLanguage : 'en';
+}
+
+let currentLanguage = getStartingLanguage();
+
+// Get a piece of interface text in the current language
+function t(key) {
+  return TEXT[currentLanguage][key];
+}
+
+// Everything the fact box can show. Each item has a category, and for every language
+// its text and the part of the text to highlight.
 const spaceFacts = [
-  { label: 'Did You Know?', text: 'A day on Venus is longer than its year: it takes about 243 Earth days to spin once, but only 225 to orbit the Sun.', highlight: 'longer than its year:' },
-  { label: 'Did You Know?', text: 'Sunlight takes about 8 minutes and 20 seconds to reach Earth.', highlight: '8 minutes and 20 seconds' },
-  { label: 'Did You Know?', text: 'Olympus Mons on Mars is the tallest volcano in the solar system, about 2.5 times the height of Mount Everest.', highlight: 'tallest volcano in the solar system,' },
-  { label: 'Did You Know?', text: 'Saturn is less dense than water. Its average density is only about 70% of water\'s.', highlight: 'less dense than water.' },
-  { label: 'Did You Know?', text: 'A teaspoon of neutron star material would weigh billions of tons.', highlight: 'billions of tons.' },
-  { label: 'Did You Know?', text: 'Astronauts on the International Space Station can see about 16 sunrises every day, because they orbit Earth every 90 minutes.', highlight: '16 sunrises every day,' },
-  { label: 'Did You Know?', text: 'Voyager 1, launched in 1977, is the most distant human-made object and is now in interstellar space.', highlight: 'most distant human-made object' },
-  { label: 'Did You Know?', text: 'The light you see from the Andromeda Galaxy left it about 2.5 million years ago.', highlight: '2.5 million years ago.' },
-  { label: 'Did You Know?', text: 'The footprints left on the Moon could last for millions of years, because there is no wind or water to erase them.', highlight: 'millions of years,' },
-  { label: 'Did You Know?', text: 'Jupiter\'s Great Red Spot is a giant storm wider than the entire Earth.', highlight: 'wider than the entire Earth.' },
-  { label: 'Did You Know?', text: 'NASA has shared an Astronomy Picture of the Day since June 16, 1995.', highlight: 'June 16, 1995.' },
-  { label: 'NASA Milestone', text: '1958: NASA officially opened for business on October 1.', highlight: '1958:' },
-  { label: 'NASA Milestone', text: '1969: Apollo 11 landed the first humans on the Moon on July 20.', highlight: '1969:' },
-  { label: 'NASA Milestone', text: '1990: The Hubble Space Telescope launched on April 24.', highlight: '1990:' },
-  { label: 'NASA Milestone', text: '2021: NASA\'s Ingenuity helicopter made the first powered flight on another planet, on Mars.', highlight: '2021:' },
-  { label: 'NASA Milestone', text: '2021: The James Webb Space Telescope launched on December 25.', highlight: '2021:' },
-  { label: 'NASA Milestone', text: '2022: Artemis I flew an uncrewed Orion spacecraft around the Moon and back.', highlight: '2022:' },
-  { label: 'By the Numbers', text: '13.8 billion years: the approximate age of the universe.', highlight: '13.8 billion years:' },
-  { label: 'By the Numbers', text: '4.6 billion years: the approximate age of our Sun.', highlight: '4.6 billion years:' },
-  { label: 'By the Numbers', text: '238,855 miles: the average distance from Earth to the Moon.', highlight: '238,855 miles:' },
-  { label: 'By the Numbers', text: '93 million miles: the average distance from Earth to the Sun.', highlight: '93 million miles:' },
-  { label: 'By the Numbers', text: '17,500 mph: about how fast the International Space Station travels.', highlight: '17,500 mph:' },
-  { label: 'Look Up Tonight', text: 'Five planets can be seen without a telescope: Mercury, Venus, Mars, Jupiter, and Saturn.', highlight: 'Five planets' },
-  { label: 'Look Up Tonight', text: 'The International Space Station looks like a bright, fast-moving dot. NASA\'s Spot the Station site shows when it passes over you.', highlight: 'bright, fast-moving dot.' },
-  { label: 'Look Up Tonight', text: 'From a dark spot away from city lights, you can see the Milky Way with just your eyes.', highlight: 'the Milky Way' },
-  { label: 'Look Up Tonight', text: 'The Andromeda Galaxy is the farthest thing most people can see without a telescope.', highlight: 'farthest thing' }
+  {
+    category: 'didYouKnow',
+    en: ['A day on Venus is longer than its year: it takes about 243 Earth days to spin once, but only 225 to orbit the Sun.', 'longer than its year:'],
+    es: ['Un día en Venus dura más que su año: tarda unos 243 días terrestres en girar una vez, pero solo 225 en dar la vuelta al Sol.', 'dura más que su año:'],
+    ar: ['اليوم على كوكب الزهرة أطول من سنته: يستغرق نحو 243 يومًا أرضيًا ليدور حول نفسه مرة واحدة، لكن 225 يومًا فقط ليدور حول الشمس.', 'أطول من سنته:'],
+    he: ['יום על נוגה ארוך יותר מהשנה שלו: לוקח לו כ־243 ימי כדור הארץ להסתובב פעם אחת סביב עצמו, אבל רק 225 להקיף את השמש.', 'ארוך יותר מהשנה שלו:']
+  },
+  {
+    category: 'didYouKnow',
+    en: ['Sunlight takes about 8 minutes and 20 seconds to reach Earth.', '8 minutes and 20 seconds'],
+    es: ['La luz del Sol tarda unos 8 minutos y 20 segundos en llegar a la Tierra.', '8 minutos y 20 segundos'],
+    ar: ['يستغرق ضوء الشمس نحو 8 دقائق و20 ثانية ليصل إلى الأرض.', '8 دقائق و20 ثانية'],
+    he: ['לאור השמש לוקח כ־8 דקות ו־20 שניות להגיע לכדור הארץ.', '8 דקות ו־20 שניות']
+  },
+  {
+    category: 'didYouKnow',
+    en: ['Olympus Mons on Mars is the tallest volcano in the solar system, about 2.5 times the height of Mount Everest.', 'tallest volcano in the solar system,'],
+    es: ['El Olympus Mons de Marte es el volcán más alto del sistema solar, unas 2,5 veces la altura del monte Everest.', 'el volcán más alto del sistema solar,'],
+    ar: ['جبل أوليمبوس على المريخ هو أعلى بركان في المجموعة الشمسية، ويبلغ ارتفاعه نحو 2.5 ضعف ارتفاع جبل إيفرست.', 'أعلى بركان في المجموعة الشمسية،'],
+    he: ['הר אולימפוס במאדים הוא הר הגעש הגבוה ביותר במערכת השמש, בערך פי 2.5 מגובה הר האוורסט.', 'הר הגעש הגבוה ביותר במערכת השמש,']
+  },
+  {
+    category: 'didYouKnow',
+    en: ['Saturn is less dense than water. Its average density is only about 70% of water\'s.', 'less dense than water.'],
+    es: ['Saturno es menos denso que el agua. Su densidad media es solo un 70 % de la del agua.', 'menos denso que el agua.'],
+    ar: ['زحل أقل كثافة من الماء. متوسط كثافته نحو 70% فقط من كثافة الماء.', 'أقل كثافة من الماء.'],
+    he: ['שבתאי פחות צפוף ממים. הצפיפות הממוצעת שלו היא רק כ־70% מזו של מים.', 'פחות צפוף ממים.']
+  },
+  {
+    category: 'didYouKnow',
+    en: ['A teaspoon of neutron star material would weigh billions of tons.', 'billions of tons.'],
+    es: ['Una cucharadita de materia de una estrella de neutrones pesaría miles de millones de toneladas.', 'miles de millones de toneladas.'],
+    ar: ['ملعقة صغيرة من مادة النجم النيوتروني قد تزن مليارات الأطنان.', 'مليارات الأطنان.'],
+    he: ['כפית של חומר מכוכב נייטרונים הייתה שוקלת מיליארדי טונות.', 'מיליארדי טונות.']
+  },
+  {
+    category: 'didYouKnow',
+    en: ['Astronauts on the International Space Station can see about 16 sunrises every day, because they orbit Earth every 90 minutes.', '16 sunrises every day,'],
+    es: ['Los astronautas de la Estación Espacial Internacional pueden ver unos 16 amaneceres cada día, porque dan la vuelta a la Tierra cada 90 minutos.', '16 amaneceres cada día,'],
+    ar: ['يمكن لرواد الفضاء على متن محطة الفضاء الدولية رؤية نحو 16 شروقًا للشمس كل يوم، لأنهم يدورون حول الأرض كل 90 دقيقة.', '16 شروقًا للشمس كل يوم،'],
+    he: ['אסטרונאוטים בתחנת החלל הבין־לאומית יכולים לראות כ־16 זריחות בכל יום, כי הם מקיפים את כדור הארץ כל 90 דקות.', '16 זריחות בכל יום,']
+  },
+  {
+    category: 'didYouKnow',
+    en: ['Voyager 1, launched in 1977, is the most distant human-made object and is now in interstellar space.', 'most distant human-made object'],
+    es: ['La Voyager 1, lanzada en 1977, es el objeto creado por el ser humano más lejano y ya está en el espacio interestelar.', 'el objeto creado por el ser humano más lejano'],
+    ar: ['فوياجر 1، التي أُطلقت عام 1977، هي أبعد جسم صنعه الإنسان، وهي الآن في الفضاء بين النجوم.', 'أبعد جسم صنعه الإنسان،'],
+    he: ['וויאג׳ר 1, ששוגרה ב־1977, היא העצם הרחוק ביותר שנבנה בידי אדם, וכעת היא נמצאת בחלל הבין־כוכבי.', 'העצם הרחוק ביותר שנבנה בידי אדם,']
+  },
+  {
+    category: 'didYouKnow',
+    en: ['The light you see from the Andromeda Galaxy left it about 2.5 million years ago.', '2.5 million years ago.'],
+    es: ['La luz que ves de la galaxia de Andrómeda salió de ella hace unos 2,5 millones de años.', 'hace unos 2,5 millones de años.'],
+    ar: ['الضوء الذي تراه من مجرة أندروميدا غادرها قبل نحو 2.5 مليون سنة.', 'قبل نحو 2.5 مليون سنة.'],
+    he: ['האור שאתם רואים מגלקסיית אנדרומדה יצא ממנה לפני כ־2.5 מיליון שנה.', 'לפני כ־2.5 מיליון שנה.']
+  },
+  {
+    category: 'didYouKnow',
+    en: ['The footprints left on the Moon could last for millions of years, because there is no wind or water to erase them.', 'millions of years,'],
+    es: ['Las huellas que quedaron en la Luna podrían durar millones de años, porque no hay viento ni agua que las borre.', 'millones de años,'],
+    ar: ['قد تبقى آثار الأقدام على سطح القمر ملايين السنين، لأنه لا توجد رياح أو مياه تمحوها.', 'ملايين السنين،'],
+    he: ['עקבות הרגליים שנשארו על הירח עשויים להחזיק מיליוני שנים, כי אין שם רוח או מים שימחקו אותם.', 'מיליוני שנים,']
+  },
+  {
+    category: 'didYouKnow',
+    en: ['Jupiter\'s Great Red Spot is a giant storm wider than the entire Earth.', 'wider than the entire Earth.'],
+    es: ['La Gran Mancha Roja de Júpiter es una tormenta gigante más ancha que toda la Tierra.', 'más ancha que toda la Tierra.'],
+    ar: ['البقعة الحمراء العظيمة على كوكب المشتري عاصفة عملاقة أعرض من الأرض بأكملها.', 'أعرض من الأرض بأكملها.'],
+    he: ['הכתם האדום הגדול של צדק הוא סופה ענקית שרחבה יותר מכדור הארץ כולו.', 'רחבה יותר מכדור הארץ כולו.']
+  },
+  {
+    category: 'didYouKnow',
+    en: ['NASA has shared an Astronomy Picture of the Day since June 16, 1995.', 'June 16, 1995.'],
+    es: ['La NASA comparte una Imagen Astronómica del Día desde el 16 de junio de 1995.', '16 de junio de 1995.'],
+    ar: ['تنشر ناسا صورة فلكية لليوم منذ 16 يونيو 1995.', '16 يونيو 1995.'],
+    he: ['נאס״א משתפת תמונה אסטרונומית יומית מאז 16 ביוני 1995.', '16 ביוני 1995.']
+  },
+  {
+    category: 'milestone',
+    en: ['1958: NASA officially opened for business on October 1.', '1958:'],
+    es: ['1958: la NASA abrió oficialmente sus puertas el 1 de octubre.', '1958:'],
+    ar: ['1958: بدأت ناسا عملها رسميًا في 1 أكتوبر.', '1958:'],
+    he: ['1958: נאס״א החלה לפעול רשמית ב־1 באוקטובר.', '1958:']
+  },
+  {
+    category: 'milestone',
+    en: ['1969: Apollo 11 landed the first humans on the Moon on July 20.', '1969:'],
+    es: ['1969: el Apolo 11 llevó a los primeros seres humanos a la Luna el 20 de julio.', '1969:'],
+    ar: ['1969: هبطت أبولو 11 بأول البشر على سطح القمر في 20 يوليو.', '1969:'],
+    he: ['1969: אפולו 11 הנחיתה את בני האדם הראשונים על הירח ב־20 ביולי.', '1969:']
+  },
+  {
+    category: 'milestone',
+    en: ['1990: The Hubble Space Telescope launched on April 24.', '1990:'],
+    es: ['1990: el telescopio espacial Hubble se lanzó el 24 de abril.', '1990:'],
+    ar: ['1990: أُطلق تلسكوب هابل الفضائي في 24 أبريل.', '1990:'],
+    he: ['1990: טלסקופ החלל האבל שוגר ב־24 באפריל.', '1990:']
+  },
+  {
+    category: 'milestone',
+    en: ['2021: NASA\'s Ingenuity helicopter made the first powered flight on another planet, on Mars.', '2021:'],
+    es: ['2021: el helicóptero Ingenuity de la NASA hizo el primer vuelo propulsado en otro planeta, en Marte.', '2021:'],
+    ar: ['2021: قامت مروحية إنجينيويتي التابعة لناسا بأول طيران بمحرك على كوكب آخر، على المريخ.', '2021:'],
+    he: ['2021: המסוק אינג׳נואיטי של נאס״א ביצע את הטיסה הממונעת הראשונה בכוכב לכת אחר, על מאדים.', '2021:']
+  },
+  {
+    category: 'milestone',
+    en: ['2021: The James Webb Space Telescope launched on December 25.', '2021:'],
+    es: ['2021: el telescopio espacial James Webb se lanzó el 25 de diciembre.', '2021:'],
+    ar: ['2021: أُطلق تلسكوب جيمس ويب الفضائي في 25 ديسمبر.', '2021:'],
+    he: ['2021: טלסקופ החלל ג׳יימס ווב שוגר ב־25 בדצמבר.', '2021:']
+  },
+  {
+    category: 'milestone',
+    en: ['2022: Artemis I flew an uncrewed Orion spacecraft around the Moon and back.', '2022:'],
+    es: ['2022: Artemis I llevó una nave Orion sin tripulación alrededor de la Luna y de vuelta.', '2022:'],
+    ar: ['2022: أرسلت مهمة أرتميس 1 مركبة أوريون دون طاقم حول القمر ثم أعادتها.', '2022:'],
+    he: ['2022: ארטמיס 1 שלחה חללית אוריון בלי צוות סביב הירח ובחזרה.', '2022:']
+  },
+  {
+    category: 'numbers',
+    en: ['13.8 billion years: the approximate age of the universe.', '13.8 billion years:'],
+    es: ['13.800 millones de años: la edad aproximada del universo.', '13.800 millones de años:'],
+    ar: ['13.8 مليار سنة: العمر التقريبي للكون.', '13.8 مليار سنة:'],
+    he: ['13.8 מיליארד שנה: הגיל המשוער של היקום.', '13.8 מיליארד שנה:']
+  },
+  {
+    category: 'numbers',
+    en: ['4.6 billion years: the approximate age of our Sun.', '4.6 billion years:'],
+    es: ['4.600 millones de años: la edad aproximada de nuestro Sol.', '4.600 millones de años:'],
+    ar: ['4.6 مليار سنة: العمر التقريبي لشمسنا.', '4.6 مليار سنة:'],
+    he: ['4.6 מיליארד שנה: הגיל המשוער של השמש שלנו.', '4.6 מיליארד שנה:']
+  },
+  {
+    category: 'numbers',
+    en: ['238,855 miles: the average distance from Earth to the Moon.', '238,855 miles:'],
+    es: ['384.400 km: la distancia media de la Tierra a la Luna.', '384.400 km:'],
+    ar: ['384,400 كم: متوسط المسافة بين الأرض والقمر.', '384,400 كم:'],
+    he: ['384,400 ק״מ: המרחק הממוצע מכדור הארץ לירח.', '384,400 ק״מ:']
+  },
+  {
+    category: 'numbers',
+    en: ['93 million miles: the average distance from Earth to the Sun.', '93 million miles:'],
+    es: ['150 millones de km: la distancia media de la Tierra al Sol.', '150 millones de km:'],
+    ar: ['150 مليون كم: متوسط المسافة بين الأرض والشمس.', '150 مليون كم:'],
+    he: ['150 מיליון ק״מ: המרחק הממוצע מכדור הארץ לשמש.', '150 מיליון ק״מ:']
+  },
+  {
+    category: 'numbers',
+    en: ['17,500 mph: about how fast the International Space Station travels.', '17,500 mph:'],
+    es: ['28.000 km/h: la velocidad aproximada de la Estación Espacial Internacional.', '28.000 km/h:'],
+    ar: ['28,000 كم/س: السرعة التقريبية لمحطة الفضاء الدولية.', '28,000 كم/س:'],
+    he: ['28,000 קמ״ש: בערך המהירות של תחנת החלל הבין־לאומית.', '28,000 קמ״ש:']
+  },
+  {
+    category: 'lookUp',
+    en: ['Five planets can be seen without a telescope: Mercury, Venus, Mars, Jupiter, and Saturn.', 'Five planets'],
+    es: ['Se pueden ver cinco planetas sin telescopio: Mercurio, Venus, Marte, Júpiter y Saturno.', 'cinco planetas'],
+    ar: ['يمكن رؤية خمسة كواكب دون تلسكوب: عطارد والزهرة والمريخ والمشتري وزحل.', 'خمسة كواكب'],
+    he: ['אפשר לראות חמישה כוכבי לכת בלי טלסקופ: כוכב חמה, נוגה, מאדים, צדק ושבתאי.', 'חמישה כוכבי לכת']
+  },
+  {
+    category: 'lookUp',
+    en: ['The International Space Station looks like a bright, fast-moving dot. NASA\'s Spot the Station site shows when it passes over you.', 'bright, fast-moving dot.'],
+    es: ['La Estación Espacial Internacional parece un punto brillante que se mueve rápido. El sitio Spot the Station de la NASA indica cuándo pasa sobre ti.', 'un punto brillante que se mueve rápido.'],
+    ar: ['تبدو محطة الفضاء الدولية كنقطة لامعة سريعة الحركة. يوضح موقع Spot the Station التابع لناسا متى تمر فوقك.', 'كنقطة لامعة سريعة الحركة.'],
+    he: ['תחנת החלל הבין־לאומית נראית כמו נקודה בהירה שנעה מהר. האתר Spot the Station של נאס״א מראה מתי היא עוברת מעליכם.', 'נקודה בהירה שנעה מהר.']
+  },
+  {
+    category: 'lookUp',
+    en: ['From a dark spot away from city lights, you can see the Milky Way with just your eyes.', 'the Milky Way'],
+    es: ['Desde un lugar oscuro, lejos de las luces de la ciudad, puedes ver la Vía Láctea a simple vista.', 'la Vía Láctea'],
+    ar: ['من مكان مظلم بعيد عن أضواء المدينة، يمكنك رؤية مجرة درب التبانة بعينيك فقط.', 'مجرة درب التبانة'],
+    he: ['ממקום חשוך, הרחק מאורות העיר, אפשר לראות את שביל החלב בעיניים בלבד.', 'שביל החלב']
+  },
+  {
+    category: 'lookUp',
+    en: ['The Andromeda Galaxy is the farthest thing most people can see without a telescope.', 'farthest thing'],
+    es: ['La galaxia de Andrómeda es lo más lejano que la mayoría de la gente puede ver sin telescopio.', 'lo más lejano'],
+    ar: ['مجرة أندروميدا هي أبعد شيء يستطيع معظم الناس رؤيته دون تلسكوب.', 'أبعد شيء'],
+    he: ['גלקסיית אנדרומדה היא הדבר הרחוק ביותר שרוב האנשים יכולים לראות בלי טלסקופ.', 'הדבר הרחוק ביותר']
+  }
 ];
 
 // How long each item stays on screen, and how long its fade takes (match style.css)
@@ -97,7 +431,7 @@ function shuffle(list) {
 
 // Put the items in a random order, with a "Did You Know?" fact first
 const factOrder = shuffle(spaceFacts);
-const firstFact = factOrder.findIndex((fact) => fact.label === 'Did You Know?');
+const firstFact = factOrder.findIndex((fact) => fact.category === 'didYouKnow');
 [factOrder[0], factOrder[firstFact]] = [factOrder[firstFact], factOrder[0]];
 
 let factIndex = 0;
@@ -114,20 +448,34 @@ function wrapWords(text, className, firstWordNumber) {
 
 // Put an item in the fact box, with its key phrase highlighted
 function showFact(fact) {
-  factHeading.textContent = fact.label;
-  spaceFact.dataset.category = fact.label;
+  factHeading.textContent = t(fact.category);
+  spaceFact.dataset.category = fact.category;
 
-  const highlightStart = fact.text.indexOf(fact.highlight);
-  const before = fact.text.slice(0, highlightStart);
-  const after = fact.text.slice(highlightStart + fact.highlight.length);
+  const [text, highlight] = fact[currentLanguage];
+  const highlightStart = text.indexOf(highlight);
+  const before = text.slice(0, highlightStart);
+  const after = text.slice(highlightStart + highlight.length);
   const beforeCount = before.split(' ').filter((word) => word).length;
-  const highlightCount = fact.highlight.split(' ').length;
+  const highlightCount = highlight.split(' ').length;
 
   factText.innerHTML = [
     wrapWords(before, '', 0),
-    wrapWords(fact.highlight, 'fact-highlight', beforeCount),
+    wrapWords(highlight, 'fact-highlight', beforeCount),
     wrapWords(after, '', beforeCount + highlightCount)
   ].filter((part) => part).join(' ');
+}
+
+// Make the fact box tall enough for the longest fact in this language at this screen size,
+// so the page below doesn't jump up and down as the facts change
+function reserveFactHeight() {
+  spaceFact.style.minHeight = '';
+  let tallest = 0;
+  spaceFacts.forEach((fact) => {
+    showFact(fact);
+    tallest = Math.max(tallest, spaceFact.offsetHeight);
+  });
+  spaceFact.style.minHeight = `${tallest}px`;
+  showFact(factOrder[factIndex]);
 }
 
 // Fade out the current item, swap in the next one, and fade back in
@@ -147,8 +495,8 @@ function showNextFact() {
 function setFactPaused(paused) {
   isFactPaused = paused;
   spaceFact.classList.toggle('paused', paused);
-  factPause.textContent = paused ? '▶ Play' : '❚❚ Pause';
-  factPause.setAttribute('aria-label', paused ? 'Play rotating facts' : 'Pause rotating facts');
+  factPause.textContent = paused ? t('play') : t('pause');
+  factPause.setAttribute('aria-label', paused ? t('playLabel') : t('pauseLabel'));
 }
 
 showFact(factOrder[0]);
@@ -178,18 +526,23 @@ function escapeHtml(text) {
   return element.innerHTML.replaceAll('"', '&quot;');
 }
 
-// Show a message (loading, error, or no results) in place of the gallery
-function showMessage(icon, message) {
+// What the gallery is showing right now, so it can be redrawn when the language changes
+let galleryState = { type: 'start' };
+
+// Show a message (an error, or no results) in place of the gallery
+function showMessage(icon, messageKey) {
+  galleryState = { type: 'message', icon, messageKey };
   gallery.innerHTML = `
     <div class="placeholder" role="status">
       <div class="placeholder-icon">${icon}</div>
-      <p>${message}</p>
+      <p>${t(messageKey)}</p>
     </div>
   `;
 }
 
 // Show the loading animation in place of the gallery: planets circling a glowing sun
 function showLoading() {
+  galleryState = { type: 'loading' };
   gallery.innerHTML = `
     <div class="placeholder" role="status">
       <div class="loader" aria-hidden="true">
@@ -198,8 +551,8 @@ function showLoading() {
         <span class="loader-orbit orbit-inner"></span>
         <span class="loader-sun"></span>
       </div>
-      <p class="loader-text">Loading space photos…</p>
-      <p class="loader-subtext">Retrieving pictures from NASA</p>
+      <p class="loader-text">${t('loading')}</p>
+      <p class="loader-subtext">${t('loadingSub')}</p>
     </div>
   `;
 }
@@ -208,7 +561,7 @@ function showLoading() {
 function formatDate(dateString) {
   // Adding T00:00:00 keeps the date from shifting because of time zones
   const date = new Date(`${dateString}T00:00:00`);
-  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  return date.toLocaleDateString(LANGUAGES[currentLanguage].locale, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 // Get the date one day before a YYYY-MM-DD date
@@ -340,12 +693,12 @@ async function fetchBackupEntries() {
 }
 
 // Try NASA's API first, then NASA's science website, and the sample entries as a last resort.
-// Gives back the entries, and a note to show above them if there's something to explain.
+// Gives back the entries, and the name of a note to show above them if there's something to explain.
 async function getEntries(startDate, endDate) {
   try {
     const entries = await fetchEntries(startDate, endDate);
     if (!isPlaceholderData(entries)) {
-      return { entries, notice: '' };
+      return { entries, noticeKey: '' };
     }
   } catch (error) {
     console.error(error);
@@ -353,8 +706,7 @@ async function getEntries(startDate, endDate) {
 
   try {
     const { entries, isCutShort } = await fetchNasaScienceEntries(startDate, endDate);
-    const notice = isCutShort ? `That's a long date range, so these are the newest ${MAX_SCIENCE_ENTRIES} entries.` : '';
-    return { entries, notice };
+    return { entries, noticeKey: isCutShort ? 'longRange' : '' };
   } catch (error) {
     console.error(error);
   }
@@ -362,7 +714,7 @@ async function getEntries(startDate, endDate) {
   const entries = await fetchBackupEntries();
   return {
     entries,
-    notice: 'NASA\'s image services aren\'t responding right now, so these are sample entries and may not match your dates.'
+    noticeKey: 'samples'
   };
 }
 
@@ -380,11 +732,11 @@ function createCard(entry, index) {
   const isFeature = index === 0;
   const isVideo = entry.media_type === 'video';
 
-  let labelText = '↗ Interactive';
+  let labelText = t('interactive');
   if (entry.media_type === 'image') {
-    labelText = 'Image';
+    labelText = t('image');
   } else if (isVideo) {
-    labelText = '▶ Video';
+    labelText = t('video');
   }
 
   return `
@@ -396,8 +748,8 @@ function createCard(entry, index) {
       </span>
       <span class="card-label ${isVideo ? 'video' : ''}">${labelText}</span>
       <span class="card-text">
-        <span class="item-title">${escapeHtml(entry.title)}</span>
-        ${isFeature && entry.explanation ? `<span class="card-summary">${escapeHtml(getSummary(entry.explanation))}</span>` : ''}
+        <span class="item-title" lang="en" dir="ltr">${escapeHtml(entry.title)}</span>
+        ${isFeature && entry.explanation ? `<span class="card-summary" lang="en" dir="ltr">${escapeHtml(getSummary(entry.explanation))}</span>` : ''}
         <span class="date">${formatDate(entry.date)}</span>
       </span>
     </button>
@@ -405,12 +757,21 @@ function createCard(entry, index) {
 }
 
 // Replace whatever is in the gallery with cards for these entries
-function renderGallery(entries, notice) {
+function renderGallery(entries, noticeKey) {
+  galleryState = { type: 'cards', entries, noticeKey };
+
   // Show the newest entries first
   currentEntries = [...entries].sort((a, b) => b.date.localeCompare(a.date));
 
-  // Any note goes above the cards
-  const noticeHtml = notice ? `<p class="backup-notice" role="status">${notice}</p>` : '';
+  // Any note goes above the cards. In other languages, also say that NASA's text is in English.
+  const notes = [];
+  if (noticeKey) {
+    notes.push(t(noticeKey).replace('{count}', MAX_SCIENCE_ENTRIES));
+  }
+  if (t('englishNote')) {
+    notes.push(t('englishNote'));
+  }
+  const noticeHtml = notes.length ? `<p class="backup-notice" role="status">${notes.join(' ')}</p>` : '';
   gallery.innerHTML = noticeHtml + currentEntries.map(createCard).join('');
 
   // If a picture fails to load, show the telescope icon instead of a broken image
@@ -427,7 +788,7 @@ async function loadGallery() {
   const endDate = endInput.value;
 
   if (startDate > endDate) {
-    showMessage('📅', 'The start date needs to be before the end date.');
+    showMessage('📅', 'startAfterEnd');
     return;
   }
 
@@ -442,22 +803,22 @@ async function loadGallery() {
   const bigBangReady = isBigBang ? playBigBang() : Promise.resolve();
 
   try {
-    const { entries, notice } = await getEntries(startDate, endDate);
+    const { entries, noticeKey } = await getEntries(startDate, endDate);
 
     // Wait for the explosion, so the photos appear out of it
     await bigBangReady;
 
     if (entries.length === 0) {
-      showMessage('🌌', 'NASA has no entries for those dates. Please try a different range.');
+      showMessage('🌌', 'noEntries');
     } else {
-      renderGallery(entries, notice);
+      renderGallery(entries, noticeKey);
       if (isBigBang) {
         launchCardsFromCenter();
       }
     }
   } catch (error) {
     console.error(error);
-    showMessage('🛰️', 'We couldn\'t reach NASA. Please check your connection and try again in a few minutes.');
+    showMessage('🛰️', 'offline');
   } finally {
     getImagesButton.disabled = false;
   }
@@ -498,15 +859,15 @@ function createModalLink(entry) {
 
   if (entry.media_type === 'image') {
     const fullSizeUrl = fixUrl(entry.hdurl) || url;
-    return `<a href="${escapeHtml(fullSizeUrl)}" target="_blank" rel="noopener">View full resolution image <span class="link-arrow" aria-hidden="true">→</span></a>`;
+    return `<a href="${escapeHtml(fullSizeUrl)}" target="_blank" rel="noopener">${t('fullImage')} <span class="link-arrow" aria-hidden="true">→</span></a>`;
   }
   if (youTubeId) {
-    return `<a href="https://www.youtube.com/watch?v=${youTubeId}" target="_blank" rel="noopener">▶ Watch on YouTube <span class="link-arrow" aria-hidden="true">→</span></a>`;
+    return `<a href="https://www.youtube.com/watch?v=${youTubeId}" target="_blank" rel="noopener">${t('watchYouTube')} <span class="link-arrow" aria-hidden="true">→</span></a>`;
   }
   if (entry.media_type === 'video' && url) {
-    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">▶ Watch the video <span class="link-arrow" aria-hidden="true">→</span></a>`;
+    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${t('watchVideo')} <span class="link-arrow" aria-hidden="true">→</span></a>`;
   }
-  return `<a href="${getApodPageUrl(entry.date)}" target="_blank" rel="noopener">View this entry on NASA's APOD site <span class="link-arrow" aria-hidden="true">→</span></a>`;
+  return `<a href="${getApodPageUrl(entry.date)}" target="_blank" rel="noopener">${t('apodPage')} <span class="link-arrow" aria-hidden="true">→</span></a>`;
 }
 
 // Fill the modal with one entry and open it
@@ -514,7 +875,7 @@ function openModal(entry) {
   modalMedia.innerHTML = createModalMedia(entry);
   modalDate.textContent = formatDate(entry.date);
   modalTitle.textContent = entry.title;
-  modalCredit.textContent = entry.copyright ? `Credit: ${entry.copyright.trim()}` : '';
+  modalCredit.textContent = entry.copyright ? `${t('credit')} ${entry.copyright.trim()}` : '';
   modalExplanation.textContent = entry.explanation;
   modalLink.innerHTML = createModalLink(entry);
   modal.showModal();
@@ -1564,3 +1925,56 @@ function launchCardsFromCenter() {
     }, { once: true });
   });
 }
+
+// ----- Switching languages -----
+
+const languageSelect = document.getElementById('languageSelect');
+
+// Show the whole page in a language, flipping it to right-to-left for Arabic and Hebrew
+function applyLanguage(language) {
+  currentLanguage = language;
+  document.documentElement.lang = language;
+  document.documentElement.dir = LANGUAGES[language].dir;
+  languageSelect.value = language;
+
+  // Text written into the page itself is marked with data-i18n="name of the text"
+  document.querySelectorAll('[data-i18n]').forEach((element) => {
+    element.textContent = t(element.dataset.i18n);
+  });
+  modalClose.setAttribute('aria-label', t('close'));
+
+  // Redraw the parts that script.js writes. A new language can need a new font, so
+  // measure the fact box again once any fonts it needs have finished loading.
+  reserveFactHeight();
+  document.fonts.ready.then(reserveFactHeight);
+  setFactPaused(isFactPaused);
+  if (galleryState.type === 'cards') {
+    renderGallery(galleryState.entries, galleryState.noticeKey);
+  } else if (galleryState.type === 'message') {
+    showMessage(galleryState.icon, galleryState.messageKey);
+  } else if (galleryState.type === 'loading') {
+    showLoading();
+  }
+
+  // Remember the choice for next time
+  try {
+    localStorage.setItem('language', language);
+  } catch (error) {
+    // Saved settings aren't available, so the choice just won't be remembered
+  }
+}
+
+languageSelect.addEventListener('change', () => {
+  applyLanguage(languageSelect.value);
+});
+
+applyLanguage(currentLanguage);
+
+// Measure the fact box again whenever the window width changes
+let lastFactWidth = window.innerWidth;
+window.addEventListener('resize', () => {
+  if (window.innerWidth !== lastFactWidth) {
+    lastFactWidth = window.innerWidth;
+    reserveFactHeight();
+  }
+});
