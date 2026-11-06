@@ -467,9 +467,11 @@ function showFact(fact) {
   const [text, highlight] = fact[currentLanguage];
 
   // Translators work sentence by sentence, so splitting the fact into words would give
-  // a word-by-word mess. While the page is being translated, show the fact as plain text.
+  // a word-by-word mess. While the page is being translated, show the fact as plain text,
+  // and keep it hidden until the translator has turned it into the chosen language.
   if (isMachineTranslated) {
     factText.textContent = text;
+    waitForTranslation();
     return;
   }
 
@@ -525,6 +527,23 @@ function reserveFactHeightSoon() {
     setTimeout(measure, 500);
   }
 }
+
+// Hide the fact box's words until the translator has finished with them. Google Translate
+// puts translated words inside <font> tags, so their appearing means it's done.
+// After two and a half seconds, show the words anyway.
+let translationTimer = null;
+
+function waitForTranslation() {
+  spaceFact.classList.add('awaiting-translation');
+  clearTimeout(translationTimer);
+  translationTimer = setTimeout(() => spaceFact.classList.remove('awaiting-translation'), 2500);
+}
+
+new MutationObserver(() => {
+  if (spaceFact.classList.contains('awaiting-translation') && factText.querySelector('font')) {
+    spaceFact.classList.remove('awaiting-translation');
+  }
+}).observe(factText, { childList: true, subtree: true });
 
 // Fade out the current item, swap in the next one, and fade back in
 function showNextFact() {
