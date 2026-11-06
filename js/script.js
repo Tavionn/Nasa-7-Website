@@ -478,6 +478,15 @@ function reserveFactHeight() {
   showFact(factOrder[factIndex]);
 }
 
+// Measuring takes a moment, so do it when the browser isn't busy showing the page
+function reserveFactHeightSoon() {
+  if (window.requestIdleCallback) {
+    requestIdleCallback(reserveFactHeight, { timeout: 2000 });
+  } else {
+    setTimeout(reserveFactHeight, 500);
+  }
+}
+
 // Fade out the current item, swap in the next one, and fade back in
 function showNextFact() {
   if (isFactPaused || isFactHovered) {
@@ -1945,8 +1954,9 @@ function applyLanguage(language) {
 
   // Redraw the parts that script.js writes. A new language can need a new font, so
   // measure the fact box again once any fonts it needs have finished loading.
-  reserveFactHeight();
-  document.fonts.ready.then(reserveFactHeight);
+  showFact(factOrder[factIndex]);
+  reserveFactHeightSoon();
+  document.fonts.ready.then(reserveFactHeightSoon);
   setFactPaused(isFactPaused);
   if (galleryState.type === 'cards') {
     renderGallery(galleryState.entries, galleryState.noticeKey);
