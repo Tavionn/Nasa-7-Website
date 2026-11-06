@@ -923,14 +923,29 @@ let nebulaScale = 0.85;
 let lastNebulaTime = -NEBULA_FRAME_MS;
 let slowFrames = 0;
 
-// Set up the graphics card. Returns null on browsers that can't do this,
-// which leaves the plain .nebula background showing instead.
+// Check whether the browser is drawing graphics without a real graphics card. That's
+// very slow for our scenes and would freeze the page, so we skip them there.
+function isSoftwareGraphics(gl) {
+  const info = gl.getExtension('WEBGL_debug_renderer_info');
+  const renderer = info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+  return /swiftshader|llvmpipe|softpipe|software|basic render/i.test(renderer);
+}
+
+// Start setting up the graphics card. Building the scene program takes the graphics card
+// a while, so we ask it to work in the background and check back each frame (see
+// checkNebula) instead of making the whole page wait. On browsers that can't do this,
+// the plain .nebula background stays showing instead.
+let nebulaInProgress = null;
+
 function setupNebula() {
   const gl = nebulaCanvas.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false });
-  if (!gl) {
+  if (!gl || isSoftwareGraphics(gl)) {
     nebulaCanvas.hidden = true;
-    return null;
+    return;
   }
+
+  // This extension lets the graphics card build the program without blocking the page
+  const backgroundBuild = gl.getExtension('KHR_parallel_shader_compile');
 
   const program = gl.createProgram();
   [[gl.VERTEX_SHADER, COVER_SCREEN_SHADER], [gl.FRAGMENT_SHADER, NEBULA_SHADER]].forEach(([type, source]) => {
@@ -940,15 +955,24 @@ function setupNebula() {
     gl.attachShader(program, shader);
   });
   gl.linkProgram(program);
+
+  nebulaInProgress = { gl, program, backgroundBuild };
+}
+
+// See whether the scene program is ready yet. Once it is, finish setting it up.
+function checkNebula() {
+  const { gl, program, backgroundBuild } = nebulaInProgress;
+  if (backgroundBuild && !gl.getProgramParameter(program, backgroundBuild.COMPLETION_STATUS_KHR)) {
+    return;
+  }
+  nebulaInProgress = null;
+
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
     console.error(gl.getProgramInfoLog(program));
     nebulaCanvas.hidden = true;
-    return null;
+    return;
   }
   gl.useProgram(program);
-
-  // The animated scenes work here, so the plain fallback background isn't needed
-  document.querySelector('.nebula').hidden = true;
 
   // Two triangles that together cover the whole canvas
   gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
@@ -957,7 +981,7 @@ function setupNebula() {
   gl.enableVertexAttribArray(position);
   gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
 
-  return {
+  nebula = {
     gl,
     resolution: gl.getUniformLocation(program, 'uResolution'),
     time: gl.getUniformLocation(program, 'uTime'),
@@ -965,6 +989,13 @@ function setupNebula() {
     sceneA: gl.getUniformLocation(program, 'uSceneA'),
     sceneB: gl.getUniformLocation(program, 'uSceneB')
   };
+  sizeNebula();
+
+  // Fade the scenes in, then hide the plain background once they've covered it
+  nebulaCanvas.classList.add('ready');
+  setTimeout(() => {
+    document.querySelector('.nebula').hidden = true;
+  }, 1300);
 }
 
 // Match the nebula canvas to the window size
@@ -1020,6 +1051,7 @@ const STAR_COLORS = ['255, 255, 255', '255, 255, 255', '170, 200, 255', '255, 21
 const FLARE_COLORS = ['255, 225, 170', '120, 175, 255', '120, 175, 255', '255, 190, 130'];
 
 let stars = [];
+let starGroups = [];
 let flareStars = [];
 let starWidth = 0;
 let starHeight = 0;
@@ -1053,17 +1085,33 @@ function setupStars() {
   // Bigger windows get more stars, up to a limit
   const starCount = Math.min(1100, Math.round((starWidth * starHeight) / 1100));
   stars = [];
+
+  // Stars of the same layer and color are sorted into a few groups that twinkle together.
+  // Drawing a whole group at once is much faster than drawing every star by itself.
+  starGroups = [];
   STAR_LAYERS.forEach((layer) => {
+    STAR_COLORS.forEach((color) => {
+      for (let i = 0; i < 4; i++) {
+        starGroups.push({
+          size: layer.size,
+          color,
+          twinkleSpeed: randomBetween(0.0005, 0.002),
+          twinkleOffset: Math.random() * Math.PI * 2,
+          stars: []
+        });
+      }
+    });
+
+    const layerGroups = starGroups.slice(-STAR_COLORS.length * 4);
     for (let i = 0; i < starCount * layer.share; i++) {
-      stars.push({
+      const star = {
         x: Math.random() * starWidth,
         y: Math.random() * starHeight,
         size: layer.size * randomBetween(0.8, 1.3),
-        speed: layer.speed,
-        color: randomItem(STAR_COLORS),
-        twinkleSpeed: randomBetween(0.0005, 0.002),
-        twinkleOffset: Math.random() * Math.PI * 2
-      });
+        speed: layer.speed
+      };
+      stars.push(star);
+      randomItem(layerGroups).stars.push(star);
     }
   });
 
@@ -1090,20 +1138,27 @@ function drawStars(time, warp) {
   const centerX = starWidth / 2;
   const centerY = starHeight / 2;
 
-  stars.forEach((star) => {
-    const brightness = 0.7 + 0.3 * Math.sin(time * star.twinkleSpeed + star.twinkleOffset);
+  starGroups.forEach((group) => {
+    const brightness = 0.7 + 0.3 * Math.sin(time * group.twinkleSpeed + group.twinkleOffset);
+
+    // Add every star in the group to one shape, then draw that shape once
+    starContext.beginPath();
+    group.stars.forEach((star) => {
+      if (warp > 0.02) {
+        starContext.moveTo(star.x, star.y);
+        starContext.lineTo(star.x + (star.x - centerX) * warp * 0.16, star.y + (star.y - centerY) * warp * 0.16);
+      } else {
+        starContext.moveTo(star.x + star.size, star.y);
+        starContext.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+      }
+    });
 
     if (warp > 0.02) {
-      starContext.strokeStyle = `rgba(${star.color}, ${brightness})`;
-      starContext.lineWidth = star.size;
-      starContext.beginPath();
-      starContext.moveTo(star.x, star.y);
-      starContext.lineTo(star.x + (star.x - centerX) * warp * 0.16, star.y + (star.y - centerY) * warp * 0.16);
+      starContext.strokeStyle = `rgba(${group.color}, ${brightness})`;
+      starContext.lineWidth = group.size;
       starContext.stroke();
     } else {
-      starContext.fillStyle = `rgba(${star.color}, ${brightness})`;
-      starContext.beginPath();
-      starContext.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+      starContext.fillStyle = `rgba(${group.color}, ${brightness})`;
       starContext.fill();
     }
   });
@@ -1225,6 +1280,9 @@ function checkSpeed(frameTime) {
 
 // Draw one frame of the animation, then ask the browser for the next one
 function animateBackground(time) {
+  if (nebulaInProgress) {
+    checkNebula();
+  }
   checkSpeed(time - lastFrameTime);
 
   // Limit the time step so nothing jumps after switching back from another tab
@@ -1262,20 +1320,45 @@ function drawStillBackground() {
   drawFlareStars(0, 0);
 }
 
-nebula = setupNebula();
-sizeNebula();
-setupStars();
+// Start the background after the page has loaded, so it doesn't slow down the first look
+// at the page. The plain background shows until then, and the animation fades in over it.
+let isBackgroundStarted = false;
 
-if (prefersReducedMotion) {
+function startBackground() {
+  setupNebula();
+  setupStars();
+  isBackgroundStarted = true;
+  starCanvas.classList.add('ready');
+
+  if (prefersReducedMotion) {
+    drawStillWhenReady();
+  } else {
+    requestAnimationFrame(animateBackground);
+  }
+}
+
+// For people who've asked their device to reduce motion: wait for the scenes, then draw one still picture
+function drawStillWhenReady() {
+  if (nebulaInProgress) {
+    checkNebula();
+    requestAnimationFrame(drawStillWhenReady);
+    return;
+  }
   drawStillBackground();
+}
+
+if (document.readyState === 'complete') {
+  setTimeout(startBackground, 300);
 } else {
-  requestAnimationFrame(animateBackground);
+  window.addEventListener('load', () => {
+    setTimeout(startBackground, 300);
+  });
 }
 
 // Redo the background if the window gets wider or taller. Phones change height a little
 // while scrolling, as the address bar hides, and that shouldn't reshuffle the stars.
 window.addEventListener('resize', () => {
-  if (window.innerWidth !== starWidth || window.innerHeight > starHeight) {
+  if (isBackgroundStarted && (window.innerWidth !== starWidth || window.innerHeight > starHeight)) {
     sizeNebula();
     setupStars();
     if (prefersReducedMotion) {

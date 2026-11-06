@@ -7,8 +7,19 @@
   --line: #2c3142;
   --text: #ffffff;
   --text-muted: #b6bccb;
-  --font-main: 'Inter', Helvetica, Arial, sans-serif;
+  --font-main: 'Inter', 'Inter Fallback', Helvetica, Arial, sans-serif;
   --font-mono: 'DM Mono', 'Courier New', monospace;
+}
+
+/* Arial, stretched to the same size as Inter. The page uses it until Inter has
+   downloaded, so the words don't shift around when the real font appears. */
+@font-face {
+  font-family: 'Inter Fallback';
+  src: local('Arial');
+  size-adjust: 107%;
+  ascent-override: 90.5%;
+  descent-override: 22.5%;
+  line-gap-override: 0%;
 }
 
 /* Global reset & box sizing */
@@ -42,6 +53,13 @@ body:has(.modal[open]) {
 
 .space-bg canvas {
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
+
+/* script.js adds this to each canvas once it has started drawing */
+.space-bg canvas.ready {
+  opacity: 1;
 }
 
 /* A simple version of the nebula for browsers that can't draw the animated one */
