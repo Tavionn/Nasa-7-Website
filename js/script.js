@@ -41,6 +41,10 @@ const TEXT = {
     getImages: 'Get Space Images',
     tooEarly: 'Astronomy Picture of the Day began on June 16, 1995, so that\'s the earliest date.',
     tooLate: 'There are no pictures from the future yet, so today is the latest date.',
+    previousMonth: 'Previous month',
+    nextMonth: 'Next month',
+    month: 'Month',
+    year: 'Year',
     placeholder: 'Select a date range and click "Get Space Images" to explore the cosmos!',
     loading: 'Loading space photos…',
     loadingSub: 'Retrieving pictures from NASA',
@@ -79,6 +83,10 @@ const TEXT = {
     getImages: 'Ver imágenes del espacio',
     tooEarly: 'La Imagen astronómica del día empezó el 16 de junio de 1995, así que esa es la fecha más temprana.',
     tooLate: 'Todavía no hay imágenes del futuro, así que hoy es la fecha más reciente.',
+    previousMonth: 'Mes anterior',
+    nextMonth: 'Mes siguiente',
+    month: 'Mes',
+    year: 'Año',
     placeholder: 'Elige un rango de fechas y haz clic en «Ver imágenes del espacio» para explorar el cosmos.',
     loading: 'Cargando fotos del espacio…',
     loadingSub: 'Obteniendo imágenes de la NASA',
@@ -117,6 +125,10 @@ const TEXT = {
     getImages: 'اعرض صور الفضاء',
     tooEarly: 'بدأت الصورة الفلكية لليوم في 16 يونيو 1995، لذا هذا أقدم تاريخ متاح.',
     tooLate: 'لا توجد صور من المستقبل بعد، لذا اليوم هو آخر تاريخ متاح.',
+    previousMonth: 'الشهر السابق',
+    nextMonth: 'الشهر التالي',
+    month: 'الشهر',
+    year: 'السنة',
     placeholder: 'اختر نطاقًا من التواريخ واضغط «اعرض صور الفضاء» لاستكشاف الكون!',
     loading: 'جارٍ تحميل صور الفضاء…',
     loadingSub: 'جارٍ جلب الصور من ناسا',
@@ -155,6 +167,10 @@ const TEXT = {
     getImages: 'הצג תמונות חלל',
     tooEarly: 'התמונה האסטרונומית היומית התחילה ב־16 ביוני 1995, ולכן זה התאריך המוקדם ביותר.',
     tooLate: 'עדיין אין תמונות מהעתיד, ולכן היום הוא התאריך המאוחר ביותר.',
+    previousMonth: 'החודש הקודם',
+    nextMonth: 'החודש הבא',
+    month: 'חודש',
+    year: 'שנה',
     placeholder: 'בחרו טווח תאריכים ולחצו על „הצג תמונות חלל” כדי לחקור את היקום!',
     loading: 'טוענים תמונות חלל…',
     loadingSub: 'מביאים תמונות מנאס״א',
@@ -481,12 +497,194 @@ startInput.addEventListener('change', () => {
     const end = addDays(startInput.value, 8);
     endInput.value = end > today ? today : end;
   }
+  showChosenDates();
 });
 
 endInput.addEventListener('change', () => {
   showDateNote('');
   keepDateInRange(endInput);
+  showChosenDates();
 });
+
+// ----- The calendar -----
+// Phones' built-in date pickers ignore the earliest and latest dates, so people could
+// choose 1990. This calendar only lets people pick days that have pictures.
+
+const startDateButton = document.getElementById('startDateButton');
+const endDateButton = document.getElementById('endDateButton');
+const calendar = document.getElementById('calendar');
+const calendarTitle = document.getElementById('calendarTitle');
+const calendarClose = document.getElementById('calendarClose');
+const calendarPrevious = document.getElementById('calendarPrevious');
+const calendarNext = document.getElementById('calendarNext');
+const calendarMonth = document.getElementById('calendarMonth');
+const calendarYear = document.getElementById('calendarYear');
+const calendarWeekdays = document.getElementById('calendarWeekdays');
+const calendarDays = document.getElementById('calendarDays');
+
+// The earliest and latest months the calendar can show
+const FIRST_YEAR = Number(earliestDate.slice(0, 4));
+const FIRST_MONTH = Number(earliestDate.slice(5, 7)) - 1;
+const LAST_YEAR = Number(today.slice(0, 4));
+const LAST_MONTH = Number(today.slice(5, 7)) - 1;
+
+// Which date input the calendar is choosing for, and which month it's showing
+let calendarInput = null;
+let shownYear = LAST_YEAR;
+let shownMonth = LAST_MONTH;
+
+// Write a date as YYYY-MM-DD, the way date inputs store it
+function toDateString(year, month, day) {
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+// Show each chosen date on its button, in the current language
+function showChosenDates() {
+  startDateButton.querySelector('.date-button-text').textContent = formatDate(startInput.value);
+  endDateButton.querySelector('.date-button-text').textContent = formatDate(endInput.value);
+}
+
+// Keep the shown month between June 1995 and this month
+function keepMonthInRange() {
+  if (shownYear < FIRST_YEAR || (shownYear === FIRST_YEAR && shownMonth < FIRST_MONTH)) {
+    shownYear = FIRST_YEAR;
+    shownMonth = FIRST_MONTH;
+  }
+  if (shownYear > LAST_YEAR || (shownYear === LAST_YEAR && shownMonth > LAST_MONTH)) {
+    shownYear = LAST_YEAR;
+    shownMonth = LAST_MONTH;
+  }
+}
+
+// Draw the calendar for the month it's showing
+function drawCalendar() {
+  keepMonthInRange();
+  const locale = LANGUAGES[currentLanguage].locale;
+
+  // Only years from 1995 to this year
+  const years = [];
+  for (let year = FIRST_YEAR; year <= LAST_YEAR; year++) {
+    years.push(`<option value="${year}" ${year === shownYear ? 'selected' : ''}>${year}</option>`);
+  }
+  calendarYear.innerHTML = years.join('');
+
+  // Only the months that have pictures: from June in 1995, and up to this month this year
+  const firstMonth = shownYear === FIRST_YEAR ? FIRST_MONTH : 0;
+  const lastMonth = shownYear === LAST_YEAR ? LAST_MONTH : 11;
+  const months = [];
+  for (let month = firstMonth; month <= lastMonth; month++) {
+    const name = new Date(Date.UTC(2000, month, 1)).toLocaleDateString(locale, { month: 'long', timeZone: 'UTC' });
+    months.push(`<option value="${month}" ${month === shownMonth ? 'selected' : ''}>${name}</option>`);
+  }
+  calendarMonth.innerHTML = months.join('');
+
+  calendarPrevious.disabled = shownYear === FIRST_YEAR && shownMonth === FIRST_MONTH;
+  calendarNext.disabled = shownYear === LAST_YEAR && shownMonth === LAST_MONTH;
+
+  // Short day names, starting on Sunday (January 2, 2000 was a Sunday)
+  const weekdays = [];
+  for (let i = 0; i < 7; i++) {
+    weekdays.push(`<span>${new Date(Date.UTC(2000, 0, 2 + i)).toLocaleDateString(locale, { weekday: 'short', timeZone: 'UTC' })}</span>`);
+  }
+  calendarWeekdays.innerHTML = weekdays.join('');
+
+  // Blank spaces before the 1st, then a button for each day
+  const firstWeekday = new Date(Date.UTC(shownYear, shownMonth, 1)).getUTCDay();
+  const daysInMonth = new Date(Date.UTC(shownYear, shownMonth + 1, 0)).getUTCDate();
+  const cells = [];
+  for (let i = 0; i < firstWeekday; i++) {
+    cells.push('<span></span>');
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = toDateString(shownYear, shownMonth, day);
+    const isAllowed = date >= earliestDate && date <= today;
+    const classes = ['calendar-day'];
+    if (date === calendarInput.value) {
+      classes.push('chosen');
+    }
+    if (date === today) {
+      classes.push('today');
+    }
+    cells.push(`<button type="button" class="${classes.join(' ')}" data-date="${date}" aria-label="${formatDate(date)}" ${isAllowed ? '' : 'disabled'}>${day.toLocaleString(locale)}</button>`);
+  }
+  calendarDays.innerHTML = cells.join('');
+}
+
+// Open the calendar for one of the date inputs, showing the month of its current date
+function openCalendar(input, titleKey) {
+  calendarInput = input;
+  const date = input.value || today;
+  shownYear = Number(date.slice(0, 4));
+  shownMonth = Number(date.slice(5, 7)) - 1;
+  calendarTitle.textContent = t(titleKey);
+  calendarPrevious.setAttribute('aria-label', t('previousMonth'));
+  calendarNext.setAttribute('aria-label', t('nextMonth'));
+  calendarMonth.setAttribute('aria-label', t('month'));
+  calendarYear.setAttribute('aria-label', t('year'));
+  calendarClose.setAttribute('aria-label', t('close'));
+  drawCalendar();
+  calendar.showModal();
+
+  // Put keyboard focus on the chosen day
+  const chosen = calendarDays.querySelector('.chosen');
+  if (chosen) {
+    chosen.focus();
+  }
+}
+
+// Move the calendar forward or back a month
+function changeMonth(step) {
+  shownMonth += step;
+  if (shownMonth < 0) {
+    shownMonth = 11;
+    shownYear--;
+  } else if (shownMonth > 11) {
+    shownMonth = 0;
+    shownYear++;
+  }
+  drawCalendar();
+}
+
+startDateButton.addEventListener('click', () => openCalendar(startInput, 'startDate'));
+endDateButton.addEventListener('click', () => openCalendar(endInput, 'endDate'));
+calendarPrevious.addEventListener('click', () => changeMonth(-1));
+calendarNext.addEventListener('click', () => changeMonth(1));
+calendarClose.addEventListener('click', () => calendar.close());
+
+calendarMonth.addEventListener('change', () => {
+  shownMonth = Number(calendarMonth.value);
+  drawCalendar();
+});
+
+calendarYear.addEventListener('change', () => {
+  shownYear = Number(calendarYear.value);
+  drawCalendar();
+});
+
+// Picking a day sets the date, just as if it had been chosen in the date input itself
+calendarDays.addEventListener('click', (event) => {
+  const day = event.target.closest('.calendar-day');
+  if (!day || day.disabled) {
+    return;
+  }
+  calendarInput.value = day.dataset.date;
+  calendarInput.dispatchEvent(new Event('change'));
+  calendar.close();
+});
+
+// Close the calendar by clicking the dark area around it
+calendar.addEventListener('click', (event) => {
+  if (event.target === calendar) {
+    calendar.close();
+  }
+});
+
+// Put keyboard focus back on the date button after the calendar closes
+calendar.addEventListener('close', () => {
+  (calendarInput === endInput ? endDateButton : startDateButton).focus();
+});
+
+showChosenDates();
 
 // Mix up a list so the items come in a random order
 function shuffle(list) {
@@ -910,6 +1108,7 @@ async function loadGallery() {
   // Make sure both dates are allowed, even if they were typed in
   keepDateInRange(startInput);
   keepDateInRange(endInput);
+  showChosenDates();
   const startDate = startInput.value;
   const endDate = endInput.value;
 
@@ -2228,6 +2427,7 @@ function applyLanguage(language) {
   });
   modalClose.setAttribute('aria-label', t('close'));
   showDateNote(dateNoteKey);
+  showChosenDates();
 
   // Redraw the parts that script.js writes. A new language can need a new font, so
   // measure the fact box again once any fonts it needs have finished loading.

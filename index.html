@@ -53,13 +53,24 @@
     </div>
 
     <form class="filters" id="dateForm">
+      <!-- Each date has a hidden input that holds the value, and a button that opens the site's
+           own calendar. Phones' built-in date pickers let people choose dates before
+           June 16, 1995, but this calendar only offers dates that have pictures. -->
       <div class="field">
-        <label for="startDate" data-i18n="startDate">Start date</label>
-        <input type="date" id="startDate" required />
+        <label for="startDateButton" data-i18n="startDate">Start date</label>
+        <input type="date" id="startDate" hidden />
+        <button type="button" id="startDateButton" class="date-button" aria-haspopup="dialog">
+          <span class="date-button-text"></span>
+          <svg class="date-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+        </button>
       </div>
       <div class="field">
-        <label for="endDate" data-i18n="endDate">End date</label>
-        <input type="date" id="endDate" required />
+        <label for="endDateButton" data-i18n="endDate">End date</label>
+        <input type="date" id="endDate" hidden />
+        <button type="button" id="endDateButton" class="date-button" aria-haspopup="dialog">
+          <span class="date-button-text"></span>
+          <svg class="date-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+        </button>
       </div>
       <button type="submit" id="getImagesButton" data-i18n="getImages">Get Space Images</button>
     </form>
@@ -107,6 +118,22 @@
         <p id="modalLink" class="modal-link"></p>
       </div>
     </div>
+  </dialog>
+
+  <!-- The site's own calendar, which only lets people pick dates that have pictures -->
+  <dialog id="calendar" class="calendar" aria-labelledby="calendarTitle">
+    <div class="calendar-head">
+      <h2 id="calendarTitle" class="calendar-title"></h2>
+      <button type="button" id="calendarClose" class="calendar-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="calendar-nav">
+      <button type="button" id="calendarPrevious" class="calendar-arrow" aria-label="Previous month">‹</button>
+      <select id="calendarMonth" aria-label="Month"></select>
+      <select id="calendarYear" aria-label="Year"></select>
+      <button type="button" id="calendarNext" class="calendar-arrow" aria-label="Next month">›</button>
+    </div>
+    <div id="calendarWeekdays" class="calendar-weekdays" aria-hidden="true"></div>
+    <div id="calendarDays" class="calendar-days"></div>
   </dialog>
 
   <!-- The Big Bang plays on this canvas, on top of the page, the first time images load -->
