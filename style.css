@@ -142,7 +142,7 @@ body:has(.modal[open]) {
 /* On phones, keep the picker narrow enough to stay clear of the logo in the middle */
 @media (max-width: 600px) {
   .language-picker select {
-    max-width: 30vw;
+    max-width: 28vw;
   }
 }
 
@@ -254,6 +254,34 @@ html.translated-rtl .field label {
   width: 96px;
 }
 
+/* The round insignia sits just before the red lettering */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.insignia {
+  display: block;
+  width: auto;
+  height: 38px;
+}
+
+/* On phones, shrink both a little so they stay clear of the language picker */
+@media (max-width: 600px) {
+  .brand {
+    gap: 8px;
+  }
+
+  .insignia {
+    height: 30px;
+  }
+
+  .logo {
+    width: 80px;
+  }
+}
+
 /* Big heading area */
 .hero {
   padding: 40px 0 28px;
@@ -363,8 +391,8 @@ input[type="date"] {
   }
 }
 
-/* A hint under the dates about where they start. It only shows on touch screens like
-   phones, because their date pickers offer years before 1995. Computers' pickers don't. */
+/* A hint under the dates about where they start. It only shows on phones (touch screens or
+   narrow screens), because phones' date pickers offer years before 1995. Computers' don't. */
 .date-hint {
   display: none;
   max-width: 600px;
@@ -375,7 +403,7 @@ input[type="date"] {
   text-shadow: 0 1px 6px #000000;
 }
 
-@media (pointer: coarse) {
+@media (pointer: coarse), (max-width: 700px) {
   .date-hint {
     display: block;
   }
