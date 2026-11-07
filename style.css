@@ -363,6 +363,29 @@ input[type="date"] {
   }
 }
 
+/* A hint under the dates about where they start. It only shows on touch screens like
+   phones, because their date pickers offer years before 1995. Computers' pickers don't. */
+.date-hint {
+  display: none;
+  max-width: 600px;
+  margin: -12px auto 20px;
+  font-size: 14px;
+  text-align: center;
+  color: var(--text-muted);
+  text-shadow: 0 1px 6px #000000;
+}
+
+@media (pointer: coarse) {
+  .date-hint {
+    display: block;
+  }
+
+  /* While the note below is explaining a moved date, the hint would just repeat it */
+  .date-hint:has(+ .date-note:not(:empty)) {
+    display: none;
+  }
+}
+
 /* A short note under the dates, when one had to be moved back inside the allowed range */
 .date-note {
   max-width: 600px;

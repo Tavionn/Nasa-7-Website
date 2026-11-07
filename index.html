@@ -11,7 +11,7 @@
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono&family=Inter:wght@400;600;800&family=Orbitron:wght@600&family=Space+Grotesk:wght@500;700&display=swap" /></noscript>
   <!-- The "?v=" number makes browsers fetch fresh copies after each update, so they never
        mix an old style sheet with a new page. Change it whenever these files change. -->
-  <link href="style.css?v=20261107" rel="stylesheet" type="text/css" />
+  <link href="style.css?v=20261107b" rel="stylesheet" type="text/css" />
 </head>
 <body>
   <!-- Animated space background, drawn by script.js: a journey through space.
@@ -65,6 +65,8 @@
       </div>
       <button type="submit" id="getImagesButton" data-i18n="getImages">Get Space Images</button>
     </form>
+    <!-- Phones only: their date pickers show years before 1995, so say where the dates start -->
+    <p class="date-hint" data-i18n="dateHint">Dates start on June 16, 1995.</p>
     <!-- Explains when a date had to be moved back inside the allowed range -->
     <p id="dateNote" class="date-note" role="status" aria-live="polite"></p>
 
@@ -115,7 +117,7 @@
   <canvas id="bigBangCanvas" class="big-bang" aria-hidden="true" hidden></canvas>
 
   <!-- "defer" lets the page show first, then runs these in order -->
-  <script src="js/dateRange.js?v=20261107" defer></script>
-  <script src="js/script.js?v=20261107" defer></script>
+  <script src="js/dateRange.js?v=20261107b" defer></script>
+  <script src="js/script.js?v=20261107b" defer></script>
 </body>
 </html>
