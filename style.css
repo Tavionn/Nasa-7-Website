@@ -29,6 +29,14 @@
   padding: 0;
 }
 
+/* Nothing should ever stick out past the sides of the screen, so the page can't be
+   dragged sideways on a phone. "clip" (unlike "hidden") keeps the sticky header working. */
+html,
+body {
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+}
+
 /* Base page styles */
 body {
   font-family: var(--font-main);
@@ -346,10 +354,27 @@ input[type="date"],
 }
 
 input[type="date"] {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 46px;
   color: var(--text);
   background-color: var(--card);
   border: 1px solid var(--line);
   color-scheme: dark;
+  /* iPhones draw their own date box with a fixed minimum width, so turn that off */
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* iPhones center the date inside the box. Line it up with the label instead. */
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: start;
+}
+
+/* Let the date fields shrink to fit the screen */
+.field {
+  min-width: 0;
 }
 
 /* Button specific */
@@ -395,12 +420,15 @@ input[type="date"] {
    narrow screens), because phones' date pickers offer years before 1995. Computers' don't. */
 .date-hint {
   display: none;
-  max-width: 600px;
+  width: fit-content;
+  max-width: 100%;
   margin: -12px auto 20px;
+  padding: 4px 12px;
   font-size: 14px;
   text-align: center;
-  color: var(--text-muted);
-  text-shadow: 0 1px 6px #000000;
+  color: var(--text);
+  background-color: rgba(5, 6, 10, 0.75);
+  border-radius: 999px;
 }
 
 @media (pointer: coarse), (max-width: 700px) {
@@ -730,25 +758,12 @@ input[type="date"] {
   background-color: rgba(var(--fact-color), 0.2);
 }
 
-/* Gallery grid: one column on phones, two on tablets, three on wide screens */
+/* Gallery: the big feature card, then groups of three pictures */
 .gallery {
   display: grid;
-  grid-template-columns: 1fr;
-  grid-auto-flow: dense;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   padding-bottom: 40px;
-}
-
-@media (min-width: 600px) {
-  .gallery {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 1000px) {
-  .gallery {
-    grid-template-columns: repeat(3, 1fr);
-  }
 }
 
 /* Shown when the gallery is using the backup entries */
@@ -785,18 +800,9 @@ input[type="date"] {
   min-height: 440px;
 }
 
-@media (min-width: 600px) {
+@media (min-width: 700px) {
   .gallery-item.feature {
-    grid-column: span 2;
-    min-height: 400px;
-  }
-}
-
-/* On wide screens, it's as tall as the two cards next to it (270 + 270 + the 16px gap) */
-@media (min-width: 1000px) {
-  .gallery-item.feature {
-    grid-row: span 2;
-    min-height: 556px;
+    min-height: 520px;
   }
 }
 
@@ -931,6 +937,174 @@ input[type="date"] {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #d2d6e2;
+}
+
+/* ----- Groups of three, like the "More NASA Images" section on nasa.gov ----- */
+
+/* "More Space Images" with the number of pictures under it */
+.section-heading {
+  margin-top: 36px;
+  text-shadow: 0 2px 12px #000000;
+}
+
+.section-heading h2 {
+  margin-bottom: 6px;
+  font-size: clamp(28px, 5vw, 40px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.section-heading .date {
+  letter-spacing: 0.3em;
+}
+
+/* Arabic letters join up, so spacing them out would break the words apart */
+html[lang="ar"] .section-heading .date,
+html.translated-rtl .section-heading .date {
+  letter-spacing: 0;
+}
+
+/* Each group sits on a dark panel: a big picture, with two smaller ones stacked beside it */
+.collection {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 20px 16px;
+  padding: 16px;
+  background-color: rgba(5, 6, 10, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.collection .tile-big {
+  grid-row: 1 / span 2;
+  grid-column: 1;
+}
+
+.collection .tile-small {
+  grid-column: 2;
+}
+
+/* Every other group puts the big picture on the other side, so the page has a rhythm */
+.collection:nth-of-type(even) {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr);
+}
+
+.collection:nth-of-type(even) .tile-big {
+  grid-column: 2;
+}
+
+.collection:nth-of-type(even) .tile-small {
+  grid-column: 1;
+}
+
+/* A group of two: side by side. A group of one: the whole width. */
+.collection-2 .tile-big {
+  grid-row: 1;
+}
+
+.collection-1 {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.collection-1 .tile-big,
+.collection-1:nth-of-type(even) .tile-big {
+  grid-column: auto;
+}
+
+/* Each picture with its title and date underneath, instead of on top */
+.gallery-item.tile {
+  min-height: 0;
+  justify-content: flex-start;
+  gap: 10px;
+  background: none;
+  border-radius: 0;
+}
+
+.tile::after {
+  display: none;
+}
+
+.tile .media-frame {
+  position: relative;
+  inset: auto;
+  aspect-ratio: 16 / 10;
+}
+
+/* The picture fills its frame without changing the frame's size */
+.tile .media-frame img {
+  position: absolute;
+  inset: 0;
+}
+
+/* The big picture grows to line up with the two pictures beside it */
+.tile-big .media-frame {
+  flex: 1;
+  min-height: 220px;
+  aspect-ratio: auto;
+}
+
+.collection-1 .tile-big .media-frame {
+  min-height: 0;
+  aspect-ratio: 16 / 9;
+}
+
+.tile-text {
+  display: block;
+}
+
+.tile .item-title {
+  font-size: 17px;
+  text-decoration: underline 2px transparent;
+  text-underline-offset: 4px;
+  transition: text-decoration-color 0.2s;
+}
+
+.tile-big .item-title {
+  font-size: clamp(20px, 2.4vw, 26px);
+}
+
+/* Underline the title on hover, the way nasa.gov does */
+.tile:hover .item-title,
+.tile:focus-visible .item-title {
+  text-decoration-color: var(--nasa-red);
+}
+
+/* On phones: the big picture across the top, and the two smaller ones side by side */
+@media (max-width: 600px) {
+  .collection,
+  .collection:nth-of-type(even) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    padding: 12px;
+    gap: 16px 12px;
+  }
+
+  .collection .tile-big,
+  .collection:nth-of-type(even) .tile-big {
+    grid-row: auto;
+    grid-column: 1 / -1;
+  }
+
+  .collection .tile-small,
+  .collection:nth-of-type(even) .tile-small {
+    grid-column: auto;
+  }
+
+  .tile-big .media-frame {
+    flex: none;
+    min-height: 0;
+    aspect-ratio: 16 / 10;
+  }
+
+  .tile-small .item-title {
+    font-size: 15px;
+  }
+
+  .tile-small .date {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+  }
 }
 
 /* Placeholder content */
@@ -1107,11 +1281,60 @@ input[type="date"] {
   object-fit: contain;
 }
 
-.modal-media iframe {
+/* A video's picture, as a button to watch it on NASA's website */
+.video-link {
+  position: relative;
   display: block;
-  width: 100%;
   aspect-ratio: 16 / 9;
-  border: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.video-link img {
+  height: 100%;
+  max-height: none;
+  object-fit: cover;
+  opacity: 0.7;
+  transition: opacity 0.3s, transform 0.5s ease;
+}
+
+.play-button {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  padding-inline-start: 5px;
+  font-size: 28px;
+  color: #ffffff;
+  background-color: var(--nasa-red);
+  border-radius: 50%;
+  box-shadow: 0 0 0 8px rgba(252, 61, 33, 0.25);
+  transform: translate(-50%, -60%);
+  transition: transform 0.3s;
+}
+
+.video-link-text {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 18px;
+  font-weight: 700;
+  text-align: center;
+  text-shadow: 0 2px 8px #000000;
+}
+
+.video-link:hover img,
+.video-link:focus-visible img {
+  opacity: 0.85;
+  transform: scale(1.04);
+}
+
+.video-link:hover .play-button,
+.video-link:focus-visible .play-button {
+  transform: translate(-50%, -60%) scale(1.1);
 }
 
 .modal-text {

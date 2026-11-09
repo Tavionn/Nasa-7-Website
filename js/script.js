@@ -56,8 +56,10 @@ const TEXT = {
     interactive: '↗ Interactive',
     credit: 'Credit:',
     fullImage: 'View full resolution image',
-    watchYouTube: '▶ Watch on YouTube',
-    watchVideo: '▶ Watch the video',
+    watchNasa: '▶ Watch on NASA\'s website',
+    moreImages: 'More Space Images',
+    imageCount: '{count} images',
+    imageCountOne: '1 image',
     apodPage: 'View this entry on NASA\'s APOD site',
     close: 'Close',
     pause: '❚❚ Pause',
@@ -95,8 +97,10 @@ const TEXT = {
     interactive: '↗ Interactivo',
     credit: 'Créditos:',
     fullImage: 'Ver la imagen en resolución completa',
-    watchYouTube: '▶ Ver en YouTube',
-    watchVideo: '▶ Ver el vídeo',
+    watchNasa: '▶ Ver en el sitio web de la NASA',
+    moreImages: 'Más imágenes del espacio',
+    imageCount: '{count} imágenes',
+    imageCountOne: '1 imagen',
     apodPage: 'Ver esta entrada en el sitio APOD de la NASA',
     close: 'Cerrar',
     pause: '❚❚ Pausa',
@@ -134,8 +138,10 @@ const TEXT = {
     interactive: '↗ تفاعلي',
     credit: 'المصدر:',
     fullImage: 'عرض الصورة بالدقة الكاملة',
-    watchYouTube: '▶ شاهد على YouTube',
-    watchVideo: '▶ شاهد الفيديو',
+    watchNasa: '▶ شاهد على موقع ناسا',
+    moreImages: 'المزيد من صور الفضاء',
+    imageCount: 'عدد الصور: {count}',
+    imageCountOne: 'صورة واحدة',
     apodPage: 'اعرض هذه المادة على موقع APOD التابع لناسا',
     close: 'إغلاق',
     pause: '❚❚ إيقاف مؤقت',
@@ -173,8 +179,10 @@ const TEXT = {
     interactive: '↗ אינטראקטיבי',
     credit: 'קרדיט:',
     fullImage: 'הצגת התמונה ברזולוציה מלאה',
-    watchYouTube: '▶ צפייה ב־YouTube',
-    watchVideo: '▶ צפייה בסרטון',
+    watchNasa: '▶ צפייה באתר של נאס״א',
+    moreImages: 'עוד תמונות מהחלל',
+    imageCount: '{count} תמונות',
+    imageCountOne: 'תמונה אחת',
     apodPage: 'הצגת הפריט באתר APOD של נאס״א',
     close: 'סגירה',
     pause: '❚❚ השהיה',
@@ -853,7 +861,7 @@ function getSummary(text) {
   return `${text.slice(0, 150).replace(/\s+\S*$/, '')}…`;
 }
 
-// Build the HTML for one gallery card. The first card is the big feature card.
+// Build the HTML for the big feature card at the top (the newest entry)
 function createCard(entry, index) {
   const thumbnailUrl = getThumbnailUrl(entry);
   const isFeature = index === 0;
@@ -883,6 +891,50 @@ function createCard(entry, index) {
   `;
 }
 
+// Build one picture in a group, with its title and date underneath, like nasa.gov
+function createTile(entry, index, size) {
+  const thumbnailUrl = getThumbnailUrl(entry);
+  const isVideo = entry.media_type === 'video';
+
+  return `
+    <button type="button" class="gallery-item tile tile-${size}" data-index="${index}">
+      <span class="media-frame">
+        ${thumbnailUrl
+          ? `<img src="${escapeHtml(thumbnailUrl)}" alt="${escapeHtml(entry.title)}" loading="lazy" />`
+          : '<span class="no-thumbnail" aria-hidden="true">🔭</span>'}
+        ${isVideo ? `<span class="card-label video">${t('video')}</span>` : ''}
+      </span>
+      <span class="tile-text">
+        <span class="item-title" lang="en" dir="ltr">${escapeHtml(entry.title)}</span>
+        <span class="date">${formatDate(entry.date)}</span>
+      </span>
+    </button>
+  `;
+}
+
+// After the feature card, show the rest in groups of three: one big picture and two
+// smaller ones stacked beside it, like the "More NASA Images" section on nasa.gov
+function createCollections(entries) {
+  if (entries.length <= 1) {
+    return '';
+  }
+
+  const rest = entries.length - 1;
+  let html = `
+    <header class="section-heading">
+      <h2>${t('moreImages')}</h2>
+      <span class="date">${rest === 1 ? t('imageCountOne') : t('imageCount').replace('{count}', rest)}</span>
+    </header>
+  `;
+
+  for (let start = 1; start < entries.length; start += 3) {
+    const group = entries.slice(start, start + 3);
+    const tiles = group.map((entry, offset) => createTile(entry, start + offset, offset === 0 ? 'big' : 'small'));
+    html += `<div class="collection collection-${group.length}">${tiles.join('')}</div>`;
+  }
+  return html;
+}
+
 // Replace whatever is in the gallery with cards for these entries
 function renderGallery(entries, noticeKey) {
   galleryState = { type: 'cards', entries, noticeKey };
@@ -899,7 +951,7 @@ function renderGallery(entries, noticeKey) {
     notes.push(t('englishNote'));
   }
   const noticeHtml = notes.length ? `<p class="backup-notice" role="status">${notes.join(' ')}</p>` : '';
-  gallery.innerHTML = noticeHtml + currentEntries.map(createCard).join('');
+  gallery.innerHTML = noticeHtml + createCard(currentEntries[0], 0) + createCollections(currentEntries);
 
   // If a picture fails to load, show the telescope icon instead of a broken image
   gallery.querySelectorAll('img').forEach((image) => {
@@ -954,7 +1006,7 @@ async function loadGallery() {
   }
 }
 
-// Build the modal's main content: an image, an embedded video, or a telescope icon
+// Build the modal's main content: an image, a link to watch a video, or a telescope icon
 function createModalMedia(entry) {
   const url = fixUrl(entry.url);
 
@@ -962,21 +1014,18 @@ function createModalMedia(entry) {
     return `<img src="${escapeHtml(url)}" alt="${escapeHtml(entry.title)}" />`;
   }
 
-  // YouTube and Vimeo links from the API are ready to embed
-  if (entry.media_type === 'video' && url && /youtube|youtu\.be|vimeo/.test(url)) {
+  // Videos open on NASA's own page for that day, so nobody has to sign in to YouTube
+  if (entry.media_type === 'video') {
+    const thumbnailUrl = getThumbnailUrl(entry);
     return `
-      <iframe
-        src="${escapeHtml(url)}"
-        title="${escapeHtml(entry.title)}"
-        allow="fullscreen; picture-in-picture"
-        referrerpolicy="strict-origin-when-cross-origin"
-      ></iframe>
+      <a class="video-link" href="${getApodPageUrl(entry.date)}" target="_blank" rel="noopener">
+        ${thumbnailUrl
+          ? `<img src="${escapeHtml(thumbnailUrl)}" alt="" />`
+          : '<span class="no-thumbnail" aria-hidden="true">🔭</span>'}
+        <span class="play-button" aria-hidden="true">▶</span>
+        <span class="video-link-text">${t('watchNasa')}</span>
+      </a>
     `;
-  }
-
-  // Video files that NASA hosts itself
-  if (entry.media_type === 'video' && url && /\.(mp4|webm)$/i.test(url)) {
-    return `<video src="${escapeHtml(url)}" controls></video>`;
   }
 
   return '<span class="no-thumbnail" aria-hidden="true">🔭</span>';
@@ -985,17 +1034,13 @@ function createModalMedia(entry) {
 // Build the link under the explanation, so people can always reach the original
 function createModalLink(entry) {
   const url = fixUrl(entry.url);
-  const youTubeId = getYouTubeId(url);
 
   if (entry.media_type === 'image') {
     const fullSizeUrl = fixUrl(entry.hdurl) || url;
     return `<a href="${escapeHtml(fullSizeUrl)}" target="_blank" rel="noopener">${t('fullImage')} <span class="link-arrow" aria-hidden="true">→</span></a>`;
   }
-  if (youTubeId) {
-    return `<a href="https://www.youtube.com/watch?v=${youTubeId}" target="_blank" rel="noopener">${t('watchYouTube')} <span class="link-arrow" aria-hidden="true">→</span></a>`;
-  }
-  if (entry.media_type === 'video' && url) {
-    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${t('watchVideo')} <span class="link-arrow" aria-hidden="true">→</span></a>`;
+  if (entry.media_type === 'video') {
+    return `<a href="${getApodPageUrl(entry.date)}" target="_blank" rel="noopener">${t('watchNasa')} <span class="link-arrow" aria-hidden="true">→</span></a>`;
   }
   return `<a href="${getApodPageUrl(entry.date)}" target="_blank" rel="noopener">${t('apodPage')} <span class="link-arrow" aria-hidden="true">→</span></a>`;
 }
