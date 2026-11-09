@@ -1,6 +1,6 @@
 // Your NASA API key. DEMO_KEY works for testing but has strict limits,
 // so replace it with your own free key from https://api.nasa.gov
-const API_KEY = 'DEMO_KEY';
+const API_KEY = 'Hm8qNGK9d6Jqpmkbp8fQG9Fz68hjfmDLtWjrRFDR';
 const API_URL = 'https://api.nasa.gov/planetary/apod';
 
 // NASA's science website also publishes every APOD. We use it if the API is having problems.
